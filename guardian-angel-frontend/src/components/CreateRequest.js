@@ -3,9 +3,10 @@ import axios from 'axios';
 
 const CreateRequest = () => {
   const [formData, setFormData] = useState({
-    user_id: '',  // Get from login session or state
     start_location: '',
-    end_location: ''
+    end_location: '',
+    meeting_time: '',
+    request_type: '',
   });
 
   const handleChange = (e) => {
@@ -18,7 +19,9 @@ const CreateRequest = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:5000/request', formData);
+      const response = await axios.post('http://localhost:5000/request', formData, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
       alert(response.data.message);
     } catch (error) {
       console.error('Error creating request:', error);
@@ -42,6 +45,23 @@ const CreateRequest = () => {
         onChange={handleChange}
         required
       />
+      <input
+        type="datetime-local"
+        name="meeting_time"
+        placeholder="Meeting Time"
+        onChange={handleChange}
+        required
+      />
+      <select
+        name="request_type"
+        onChange={handleChange}
+        required
+      >
+        <option value="">Select Request Type</option>
+        <option value="Walk">Walk</option>
+        <option value="Trip">Trip</option>
+        <option value="Other">Other</option>
+      </select>
       <button type="submit">Create Request</button>
     </form>
   );
