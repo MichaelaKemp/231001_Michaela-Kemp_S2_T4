@@ -1,94 +1,68 @@
 .view-requests {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+
+.requests-title {
+  color: #FF69B4;
+  font-size: 2rem;
   text-align: center;
+  margin-bottom: 1.5rem;
 }
 
 .request-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
   list-style: none;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
 }
 
 .request-item {
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  width: 350px; /* Increase width from 300px to 350px */
-  margin-bottom: 16px;
+  align-self: start; /* Makes each card's height independent */
 }
 
 .request-card {
-  padding: 16px;
+  padding: 1rem;
+  border: 1px solid #eee;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background-color: #f9f9f9;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .request-user-info {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .profile-image {
-  width: 60px;
-  height: 60px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
-  margin-right: 8px;
+  object-fit: cover;
 }
 
-.urgent-message {
-  color: red;
-  font-weight: bold;
-  margin-top: 8px;
+.request-details p {
+  margin: 0.25rem 0;
+  line-height: 1.2;
+  font-size: 0.95rem;
+  color: #333;
 }
 
-/* Button group styling */
 .button-group {
   display: flex;
-  gap: 10px;
-  margin-top: 10px;
-  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
-/* Comment input section styling */
-.comment-input-section {
-  display: flex;
-  gap: 10px;
-  margin-top: 8px;
-  align-items: center;
-}
-
-.comment-input-section input {
-  flex-grow: 1;
-  padding: 8px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-.comment-section {
-  margin-top: 8px;
-}
-
-.comment-section ul {
-  padding: 0;
-  margin-top: 8px;
-  list-style: none;
-}
-
-.comment-section li {
-  background-color: #f9f9f9;
-  padding: 4px 8px;
-  border-radius: 4px;
-  margin-top: 4px;
-}
-
-.comment-section button {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.comment-section button:hover {
-  background-color: #0056b3;
+.error-message {
+  color: red;
+  text-align: center;
+  margin-bottom: 1rem;
 }

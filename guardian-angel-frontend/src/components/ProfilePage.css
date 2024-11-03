@@ -1,0 +1,98 @@
+/* Full-page container for centering the profile content */
+.profile-page-container {
+  position: relative; /* So the back button is positioned relative to this container */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+  padding-top: 4rem; /* Space for navbar */
+}
+
+/* Back button styling, positioned under the navbar */
+.profile-page-back-btn {
+  position: absolute;
+  top: 30px; /* Adjust this value based on the navbar height */
+  left: 20px;
+  background-color: #FF69B4;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s;
+  z-index: 5;
+}
+
+.profile-page-back-btn:hover {
+  background-color: #e75480;
+}
+
+/* Centered container for the profile card */
+.profile-page-profile-container {
+  max-width: 700px; /* Made wider as requested */
+  padding: 2rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  margin-top: 2rem; /* Add space to visually separate from the back button */
+}
+
+/* Profile Image Container */
+.profile-page-image-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+/* Profile Image */
+.profile-page-image {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #FF69B4;
+}
+
+/* Profile Name Styling */
+.profile-page-profile-container h2 {
+  color: #FF69B4;
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+}
+
+/* Profile Information Styling */
+.profile-page-profile-container p {
+  font-size: 1rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+/* Labels for Email and Bio */
+.profile-page-profile-container p strong {
+  color: #FF69B4;
+  font-weight: bold;
+}
+
+/* Responsive Design for Small Screens */
+@media (max-width: 600px) {
+  .profile-page-profile-container {
+      padding: 1.5rem;
+  }
+
+  .profile-page-image {
+      width: 100px;
+      height: 100px;
+  }
+
+  .profile-page-profile-container h2 {
+      font-size: 1.5rem;
+  }
+
+  .profile-page-back-btn {
+      padding: 0.4rem 0.8rem;
+  }
+}

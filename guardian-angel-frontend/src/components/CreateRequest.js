@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import './CreateRequest.css';
 
 const CreateRequest = () => {
   const [formData, setFormData] = useState({
@@ -29,41 +30,46 @@ const CreateRequest = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <div className="create-request-container">
       <h2>Create Request</h2>
-      <input
-        type="text"
-        name="start_location"
-        placeholder="Start Location"
-        onChange={handleChange}
-        required
-      />
-      <input
-        type="text"
-        name="end_location"
-        placeholder="End Location"
-        onChange={handleChange}
-        required
-      />
-      <input
-        type="datetime-local"
-        name="meeting_time"
-        placeholder="Meeting Time"
-        onChange={handleChange}
-        required
-      />
-      <select
-        name="request_type"
-        onChange={handleChange}
-        required
-      >
-        <option value="">Select Request Type</option>
-        <option value="Walk">Walk</option>
-        <option value="Trip">Trip</option>
-        <option value="Other">Other</option>
-      </select>
-      <button type="submit">Create Request</button>
-    </form>
+      <form onSubmit={handleSubmit} className="create-request-form">
+        <input
+          type="text"
+          name="start_location"
+          placeholder="Start Location"
+          onChange={handleChange}
+          required
+          className="form-input"
+        />
+        <input
+          type="text"
+          name="end_location"
+          placeholder="End Location"
+          onChange={handleChange}
+          required
+          className="form-input"
+        />
+        <input
+          type="datetime-local"
+          name="meeting_time"
+          onChange={handleChange}
+          required
+          className="form-input"
+        />
+        <select
+          name="request_type"
+          onChange={handleChange}
+          required
+          className="form-select"
+        >
+          <option value="">Select Request Type</option>
+          <option value="Walk">Walk</option>
+          <option value="Trip">Trip</option>
+          <option value="Other">Other</option>
+        </select>
+        <button type="submit" className="submit-btn">Create Request</button>
+      </form>
+    </div>
   );
 };
 

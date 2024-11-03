@@ -16,30 +16,33 @@ const Profile = () => {
   const [editRequest, setEditRequest] = useState(null);
   const [imageFile, setImageFile] = useState(null);
 
-  useEffect(() => {
-    // Fetch user data
-    axios.get('http://localhost:5000/user/profile', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-    .then(response => {
-      const { name, surname, email, bio, profile_image } = response.data;
-      setProfileData({ name, surname, email, bio, profile_image });
-    })
-    .catch(error => {
-      console.error('Error fetching profile data:', error);
-    });
-
-    // Fetch user requests
-    axios.get('http://localhost:5000/user/requests', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-    .then(response => {
-      setRequests(response.data);
-    })
-    .catch(error => {
+  // Fetch requests along with accepted users
+  const fetchRequests = async () => {
+    try {
+      const requestsRes = await axios.get('http://localhost:5000/user/requests', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      console.log("Fetched requests with accepted users:", requestsRes.data);
+      setRequests(requestsRes.data);
+    } catch (error) {
       console.error('Error fetching user requests:', error);
-      setError('Failed to load requests. Please try again later.');
-    });
+    }
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const profileRes = await axios.get('http://localhost:5000/user/profile', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        });
+        setProfileData(profileRes.data);
+        fetchRequests();
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError('Failed to load data. Please try again later.');
+      }
+    };
+    fetchData();
   }, []);
 
   const handleInputChange = (e) => {
@@ -54,9 +57,8 @@ const Profile = () => {
     setImageFile(e.target.files[0]);
   };
 
-  const handleProfileUpdate = (e) => {
+  const handleProfileUpdate = async (e) => {
     e.preventDefault();
-
     const formData = new FormData();
     formData.append('name', profileData.name);
     formData.append('surname', profileData.surname);
@@ -64,107 +66,75 @@ const Profile = () => {
     if (imageFile) {
       formData.append('image', imageFile);
     }
-
-    axios.post('http://localhost:5000/user/profile/update', formData, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'multipart/form-data',
-      },
-    })
-    .then(response => {
+    try {
+      const response = await axios.post('http://localhost:5000/user/profile/update', formData, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       toast.success('Profile updated successfully!');
       setProfileData((prevData) => ({
         ...prevData,
         profile_image: response.data.profile_image || prevData.profile_image,
       }));
       setImageFile(null);
-    })
-    .catch(error => {
+    } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile. Please try again.');
-    });
+    }
   };
 
-  const handleCancelRequest = (requestId) => {
-    axios.post('http://localhost:5000/user/request/cancel', { requestId }, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-    .then(response => {
+  const handleAcceptUser = async (requestId, userId) => {
+    try {
+      await axios.post(`http://localhost:5000/requests/${requestId}/accept`, { userId }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      toast.success('User accepted successfully!');
+      fetchRequests();
+    } catch (error) {
+      console.error('Error accepting user:', error);
+      toast.error('Failed to accept user. Please try again.');
+    }
+  };
+
+  const handleDeclineUser = async (requestId, userId) => {
+    try {
+      await axios.post(`http://localhost:5000/requests/${requestId}/decline`, { userId }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      toast.success('User declined successfully!');
+      fetchRequests();
+    } catch (error) {
+      console.error('Error declining user:', error);
+      toast.error('Failed to decline user. Please try again.');
+    }
+  };
+
+  const handleCancelRequest = async (requestId) => {
+    try {
+      await axios.post('http://localhost:5000/user/request/cancel', { requestId }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
       toast.success('Request canceled successfully!');
-      setRequests(prevRequests =>
-        prevRequests.map(req =>
-          req.id === requestId ? { ...req, request_status: 'canceled' } : req
-        )
-      );
-    })
-    .catch(error => {
+      await fetchRequests();
+    } catch (error) {
       console.error('Error canceling request:', error);
       toast.error('Failed to cancel request. Please try again.');
-    });
+    }
   };
 
-  const handleDeleteRequest = (requestId) => {
-    axios.delete(`http://localhost:5000/user/request/${requestId}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-    .then(response => {
+  const handleDeleteRequest = async (requestId) => {
+    try {
+      await axios.delete(`http://localhost:5000/user/request/${requestId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
       toast.success('Request deleted successfully!');
-      setRequests(prevRequests => prevRequests.filter(req => req.id !== requestId));
-    })
-    .catch(error => {
+      await fetchRequests();
+    } catch (error) {
       console.error('Error deleting request:', error);
       toast.error('Failed to delete request. Please try again.');
-    });
-  };
-
-  const handleEditRequestChange = (e) => {
-    const { name, value } = e.target;
-    setEditRequest(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSaveRequest = () => {
-    if (!editRequest) return;
-
-    axios.post('http://localhost:5000/user/request/update', editRequest, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-    .then(response => {
-      toast.success('Request updated successfully!');
-      setRequests(prevRequests =>
-        prevRequests.map(req =>
-          req.id === editRequest.id ? { ...editRequest, request_status: editRequest.request_status } : req
-        )
-      );
-      setEditRequest(null);
-    })
-    .catch(error => {
-      console.error('Error updating request:', error);
-      toast.error('Failed to update request. Please try again.');
-    });
-  };
-
-  const handleReopenRequest = () => {
-    if (!editRequest) return;
-
-    axios.post('http://localhost:5000/user/request/reopen', editRequest, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-    .then(response => {
-      toast.success('Request reopened successfully!');
-      setRequests(prevRequests =>
-        prevRequests.map(req =>
-          req.id === editRequest.id ? { ...editRequest, request_status: 'open' } : req
-        )
-      );
-      setEditRequest(null);
-    })
-    .catch(error => {
-      console.error('Error reopening request:', error);
-      toast.error('Failed to reopen request. Please try again.');
-    });
+    }
   };
 
   const startEditingRequest = (request) => {
@@ -182,9 +152,9 @@ const Profile = () => {
     <div className="profile-container">
       <div className="profile-image-container">
         {profileData.profile_image && (
-          <img 
-            src={`http://localhost:5000/uploads/${profileData.profile_image}`} 
-            alt="Profile" 
+          <img
+            src={`http://localhost:5000/uploads/${profileData.profile_image}`}
+            alt="Profile"
             className="profile-image"
           />
         )}
@@ -229,27 +199,49 @@ const Profile = () => {
       <ul className="request-list">
         {requests.length > 0 ? (
           requests.map(request => (
-            <li key={request.id} className={`request-item ${request.request_status}`}>
+            <li key={request.request_id} className={`request-item ${request.request_status}`}>
               <div className="request-card">
                 <p><strong>Start Location:</strong> {request.start_location}</p>
                 <p><strong>End Location:</strong> {request.end_location}</p>
                 <p><strong>Meeting Time:</strong> {new Date(request.meeting_time).toLocaleString()}</p>
                 <p><strong>Request Type:</strong> {request.request_type}</p>
                 <p><strong>Status:</strong> {request.request_status}</p>
+
+                {request.acceptedUsers && request.acceptedUsers.length > 0 && (
+                  <div className="accepted-users">
+                    <p><strong>Accepted Users:</strong></p>
+                    <ul>
+                      {request.acceptedUsers.map(user => (
+                        <li key={user.id} className="accepted-user">
+                          <img
+                            src={`http://localhost:5000/uploads/${user.profile_image}`}
+                            alt={`${user.name}'s profile`}
+                            className="accepted-user-image"
+                          />
+                          <p>{user.name} {user.surname}</p>
+                          <button onClick={() => handleAcceptUser(request.request_id, user.id)}>Accept</button>
+                          <button onClick={() => handleDeclineUser(request.request_id, user.id)}>Decline</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {['open', 'canceled'].includes(request.request_status) && (
-                  <>
+                <div className="button-group">
                     <button onClick={() => startEditingRequest(request)}>Edit</button>
                     {request.request_status === 'open' && (
-                      <button onClick={() => handleCancelRequest(request.id)}>Cancel</button>
+                    <button onClick={() => handleCancelRequest(request.request_id)}>Cancel</button>
                     )}
-                  </>
+                </div>
                 )}
                 {request.request_status === 'closed' && (
-                  <>
+                <div className="button-group">
                     <button onClick={() => startEditingRequest(request)}>Edit & Reopen</button>
-                    <button onClick={() => handleDeleteRequest(request.id)}>Delete</button>
-                  </>
+                    <button onClick={() => handleDeleteRequest(request.request_id)}>Delete</button>
+                </div>
                 )}
+
               </div>
             </li>
           ))
@@ -257,29 +249,6 @@ const Profile = () => {
           <p>No requests found.</p>
         )}
       </ul>
-
-      {editRequest && (
-        <div className="edit-request-form">
-          <h3>Edit Request</h3>
-          <form>
-            <input type="text" name="start_location" placeholder="Start Location" value={editRequest.start_location} onChange={handleEditRequestChange} required />
-            <input type="text" name="end_location" placeholder="End Location" value={editRequest.end_location} onChange={handleEditRequestChange} required />
-            <input type="datetime-local" name="meeting_time" value={editRequest.meeting_time || ''} onChange={handleEditRequestChange} required />
-            <select name="request_type" value={editRequest.request_type} onChange={handleEditRequestChange} required>
-              <option value="">Select Request Type</option>
-              <option value="Walk">Walk</option>
-              <option value="Trip">Trip</option>
-              <option value="Other">Other</option>
-            </select>
-            {editRequest.request_status === 'closed' ? (
-              <button type="button" onClick={handleReopenRequest}>Reopen Request</button>
-            ) : (
-              <button type="button" onClick={handleSaveRequest}>Save Changes</button>
-            )}
-            <button type="button" onClick={cancelEditing}>Cancel</button>
-          </form>
-        </div>
-      )}
     </div>
   );
 };

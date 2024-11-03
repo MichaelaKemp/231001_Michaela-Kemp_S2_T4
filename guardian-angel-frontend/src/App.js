@@ -1,15 +1,16 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import Register from './components/Register';
 import Login from './components/Login';
 import CreateRequest from './components/CreateRequest';
 import ViewRequests from './components/ViewRequests';
 import Home from './components/Home';
-import Profile from './components/Profile'; // Import the new Profile component
-import Navbar from './components/Navbar'; // Import the Navbar component
-import { ToastContainer, toast } from 'react-toastify'; // Import Toastify components
+import Profile from './components/Profile';
+import Navbar from './components/Navbar';
+import ProfilePage from './components/ProfilePage';
+import { ToastContainer, toast } from 'react-toastify'; // Import both ToastContainer and toast
 import 'react-toastify/dist/ReactToastify.css'; // Import Toastify styles
-import './style.css'; // Import your CSS file
+import './style.css';
 import axios from 'axios';
 
 // Axios Interceptors setup
@@ -21,9 +22,7 @@ axios.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 axios.interceptors.response.use(
@@ -39,9 +38,9 @@ axios.interceptors.response.use(
 );
 
 // Private Route component to protect routes
-const PrivateRoute = ({ element: Element, ...rest }) => {
+const PrivateRoute = () => {
   const token = localStorage.getItem('token');
-  return token ? <Element {...rest} /> : <Navigate to="/login" />;
+  return token ? <Outlet /> : <Navigate to="/login" />;
 };
 
 // Helper component to conditionally render the Navbar
@@ -51,16 +50,21 @@ const AppLayout = () => {
 
   return (
     <>
-      {showNavbar && <Navbar />} {/* Show Navbar only if not on login or register pages */}
-      <ToastContainer /> {/* Toastify container for displaying popups */}
+      {showNavbar && <Navbar />}
+      <ToastContainer />
       <Routes>
-        <Route path="/" element={<Navigate to="/home" />} /> {/* Redirect to Home */}
+        <Route path="/" element={<Navigate to="/home" />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/home" element={<PrivateRoute element={Home} />} />
-        <Route path="/create-request" element={<PrivateRoute element={CreateRequest} />} />
-        <Route path="/view-requests" element={<PrivateRoute element={ViewRequests} />} />
-        <Route path="/profile" element={<PrivateRoute element={Profile} />} /> {/* Add Profile route */}
+
+        {/* Protected routes */}
+        <Route element={<PrivateRoute />}>
+          <Route path="/home" element={<Home />} />
+          <Route path="/create-request" element={<CreateRequest />} />
+          <Route path="/view-requests" element={<ViewRequests />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:userId" element={<ProfilePage />} /> {/* Dynamic user profile */}
+        </Route>
       </Routes>
     </>
   );

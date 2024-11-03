@@ -1,0 +1,88 @@
+/* Full-page container for centering the form */
+.full-page-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh; /* Full viewport height */
+    background-color: #f5f5f5; /* Optional background color */
+  }
+  
+  /* Centered container for login and registration forms */
+  .form-container {
+    max-width: 500px;
+    padding: 2rem;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Title styling for login and registration forms */
+  .form-container h2 {
+    color: #FF69B4;
+    font-size: 2rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  
+  /* Input field styling */
+  .form-container input[type="text"],
+  .form-container input[type="email"],
+  .form-container input[type="password"] {
+    width: 100%;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    border-radius: 0.25rem;
+    border: 1px solid #ddd;
+    transition: border-color 0.3s;
+  }
+  
+  .form-container input[type="text"]:focus,
+  .form-container input[type="email"]:focus,
+  .form-container input[type="password"]:focus {
+    border-color: #FF69B4;
+  }
+  
+  /* Button styling for form submission */
+  .form-container button {
+    width: 100%;
+    background-color: #FF69B4;
+    color: white;
+    padding: 0.75rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  .form-container button:hover {
+    background-color: #e75480;
+  }
+  
+  /* Link text styling */
+  .link-text {
+    text-align: center;
+    font-size: 0.9rem;
+    margin-top: 1rem;
+  }
+  
+  .link-text a {
+    color: #007BFF;
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+  
+  .link-text a:hover {
+    color: #0056b3;
+  }
+  
+  /* Error message styling */
+  .form-container p {
+    color: red;
+    margin-top: -0.5rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    text-align: center;
+  }

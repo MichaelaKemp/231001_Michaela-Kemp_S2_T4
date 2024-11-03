@@ -8,29 +8,34 @@ const Navbar = () => {
   const [userName, setUserName] = useState('Guest');
   const navigate = useNavigate();
   const location = useLocation();
-  const token = localStorage.getItem('token');
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
+    localStorage.removeItem('token'); // Remove token on logout
+    navigate('/login'); // Redirect to login page
   };
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
     if (token) {
       axios
         .get('http://localhost:5000/user/profile', {
           headers: { Authorization: `Bearer ${token}` },
         })
         .then((response) => {
-          setUserName(response.data.name);
+          setUserName(response.data.name); // Assumes response has 'name' field
         })
         .catch((error) => {
           console.error('Error fetching user data:', error);
-          handleLogout();
+          if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            handleLogout(); // Logs out if token is invalid or expired
+          } else {
+            console.warn('Failed to load profile data. Please try again later.');
+          }
         });
     }
-  }, [token]);
+  }, [navigate]); // Dependencies updated to include `navigate`
 
+  // Prevent Navbar from rendering on login or register pages
   if (location.pathname === '/login' || location.pathname === '/register') {
     return null;
   }
@@ -46,7 +51,7 @@ const Navbar = () => {
         <li><Link to="/create-request">Create Request</Link></li>
       </ul>
       <div className="navbar-user">
-        {token ? (
+        {localStorage.getItem('token') ? (
           <>
             <Link to="/profile" className="navbar-user-link">
               <i className="fas fa-user navbar-user-icon"></i>

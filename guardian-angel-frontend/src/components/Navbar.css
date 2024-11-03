@@ -1,69 +1,72 @@
+/* Navbar container styling */
 .navbar {
+    background: linear-gradient(135deg, #FF69B4 0%, #FF1493 100%);
+    color: white;
+    padding: 1rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: rgba(0, 0, 0, 0.8);
-    padding: 1em 2em;
-    color: white;
-    font-family: 'Playfair Display', serif;
-}
-
+    width: 100%;
+  }
+  
+ /* Styling for 'Guardian Angel' brand link */
 .navbar-brand a {
-    color: white;
-    text-decoration: none;
-    font-size: 2em;
+    font-size: 1.75rem;
     font-weight: bold;
-}
-
-.navbar-links {
-    list-style: none;
+    color: white !important; /* Ensure color is white */
+    text-decoration: none !important; /* Remove underline */
+  }
+  
+  
+  /* Styling for navigation links */
+  .navbar-links {
     display: flex;
-    gap: 2em;
-}
-
-.navbar-links li a {
+    gap: 1.5rem;
+    list-style-type: none; /* Remove the dots from the links */
+  }
+  
+  .navbar-links a {
+    color: white; /* Set color to white */
+    text-decoration: none; /* Remove underline */
+    transition: color 0.3s;
+  }
+  
+  .navbar-links a:hover {
+    color: #FFB6C1; /* Light pink on hover */
+  }
+  
+  /* Styling for user greeting and logout button */
+  .navbar-user {
+    display: flex;
+    align-items: center;
+  }
+  
+  .navbar-user-link {
     color: white;
     text-decoration: none;
-    font-size: 1.1em;
-}
-
-.navbar-user {
+    margin-right: 1rem;
     display: flex;
     align-items: center;
-    gap: 1em;
-}
-
-/* Separate styling for user icon and text */
-.navbar-user-link {
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    text-decoration: none;
-    color: #ffd700;
-}
-
-.navbar-user-icon {
-    font-size: 1.5em;
-    color: #ffd700; /* Gold color for the icon */
-}
-
-.navbar-username {
-    font-size: 1em;
-    color: #ffd700;
-}
-
-.navbar-logout {
-    background: none;
-    border: 1px solid #ffd700;
-    color: #ffd700;
-    padding: 0.5em 1em;
-    border-radius: 5px;
+  }
+  
+  .navbar-user-icon {
+    margin-right: 0.5rem;
+  }
+  
+  .navbar-username {
+    font-size: 1rem;
+  }
+  
+  .navbar-logout {
+    background-color: #ef4444;
+    color: white;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 0.25rem;
     cursor: pointer;
-    font-size: 1em;
-    transition: background-color 0.3s ease;
-}
-
-.navbar-logout:hover {
-    background-color: #ffd700;
-    color: black;
-}
+    transition: background-color 0.3s;
+  }
+  
+  .navbar-logout:hover {
+    background-color: #dc2626;
+  }  

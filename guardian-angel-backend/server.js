@@ -38,7 +38,7 @@ const authenticateToken = (req, res, next) => {
 
   jwt.verify(actualToken, process.env.JWT_SECRET, (err, user) => {
     if (err) return res.status(403).send({ error: 'Invalid token.' });
-    req.user = user; // Ensure user object is correctly set
+    req.user = user;
     next();
   });
 };
@@ -113,15 +113,14 @@ app.get('/user/profile', authenticateToken, (req, res) => {
 // Update user profile (protected route)
 app.post('/user/profile/update', authenticateToken, upload.single('image'), (req, res) => {
   const userId = req.user.id;
-  const { name, surname, bio } = req.body;
-  const profileImage = req.file ? req.file.filename : null; // Check if a new image is uploaded
+  const { name, surname, email, bio } = req.body;
+  const profileImage = req.file ? req.file.filename : null;
 
-  // Construct the query and values array
-  let query = `UPDATE users SET name = ?, surname = ?, bio = ?`;
-  const values = [name, surname, bio];
+  let query = `UPDATE users SET name = ?, surname = ?, email = ?, bio = ?`;
+  const values = [name, surname, email, bio];
 
   if (profileImage) {
-    query += `, profile_image = ?`; // Append profile_image to the query if there’s a new image
+    query += `, profile_image = ?`;
     values.push(profileImage);
   }
 
@@ -141,37 +140,85 @@ app.post('/user/profile/update', authenticateToken, upload.single('image'), (req
   });
 });
 
-// Fetch user requests and mark expired ones as closed (protected route)
+app.post('/user/request/update', authenticateToken, (req, res) => {
+  const { request_id, start_location, end_location, meeting_time, request_type } = req.body;
+
+  const query = `
+    UPDATE requests
+    SET start_location = ?, end_location = ?, meeting_time = ?, request_type = ?
+    WHERE id = ? AND user_id = ?`;
+
+  db.query(query, [start_location, end_location, meeting_time, request_type, request_id, req.user.id], (err, result) => {
+    if (err) {
+      console.error('Error updating request:', err);
+      res.status(500).send({ error: 'Failed to update request' });
+    } else {
+      res.status(200).send({ message: 'Request updated successfully' });
+    }
+  });
+});
+
+// Fetch all open requests along with the user's details
+app.get('/all-open-requests', authenticateToken, (req, res) => {
+  const fetchRequestsQuery = `
+    SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
+           r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
+    FROM requests r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.request_status = 'open'
+    ORDER BY r.meeting_time DESC
+  `;
+
+  db.query(fetchRequestsQuery, (err, requests) => {
+    if (err) {
+      return res.status(500).send({ error: 'Error fetching requests' });
+    }
+    res.status(200).json(requests);
+  });
+});
+
+// Fetch all requests and accepted users
 app.get('/user/requests', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
-  // First, update any expired requests to 'closed'
-  const updateExpiredRequestsQuery = `
-    UPDATE requests
-    SET request_status = 'closed'
-    WHERE user_id = ? AND request_status = 'open' AND meeting_time < NOW()
+  const fetchRequestsQuery = `
+    SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, r.created_at, r.meeting_time, r.request_type
+    FROM requests r
+    WHERE r.user_id = ?
+    ORDER BY r.created_at DESC
   `;
 
-  db.query(updateExpiredRequestsQuery, [userId], (err) => {
+  db.query(fetchRequestsQuery, [userId], (err, requests) => {
     if (err) {
-      return res.status(500).send({ error: 'Error updating expired requests' });
+      return res.status(500).send({ error: 'Error fetching requests' });
     }
 
-    // Now, retrieve the updated requests
-    const fetchRequestsQuery = `
-      SELECT id, start_location, end_location, request_status, created_at, meeting_time, request_type
-      FROM requests
-      WHERE user_id = ?
-      ORDER BY created_at DESC
-    `;
+    const fetchAcceptedUsersPromises = requests.map(request => {
+      const acceptedUsersQuery = `
+        SELECT u.id, u.name, u.surname, u.profile_image
+        FROM accepted_requests ar
+        JOIN users u ON ar.user_id = u.id
+        WHERE ar.request_id = ?
+      `;
 
-    db.query(fetchRequestsQuery, [userId], (err, results) => {
-      if (err) {
-        return res.status(500).send({ error: err.message });
-      } else {
-        res.status(200).json(results);
-      }
+      return new Promise((resolve, reject) => {
+        db.query(acceptedUsersQuery, [request.request_id], (err, acceptedUsers) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ ...request, acceptedUsers });
+          }
+        });
+      });
     });
+
+    Promise.all(fetchAcceptedUsersPromises)
+      .then(requestsWithAcceptedUsers => {
+        res.status(200).json(requestsWithAcceptedUsers);
+      })
+      .catch(err => {
+        res.status(500).send({ error: 'Error fetching accepted users' });
+      });
   });
 });
 
@@ -197,168 +244,57 @@ app.post('/user/request/reopen', authenticateToken, (req, res) => {
   });
 });
 
-// Update a user request (protected route)
-app.post('/user/request/update', authenticateToken, (req, res) => {
+// Accept a request
+app.post('/requests/:id/accept', authenticateToken, (req, res) => {
+  const requestId = req.params.id;
   const userId = req.user.id;
-  const { id, start_location, end_location, meeting_time, request_type } = req.body;
 
   const query = `
-    UPDATE requests
-    SET start_location = ?, end_location = ?, meeting_time = ?, request_type = ?,
-        request_status = CASE WHEN request_status = 'canceled' THEN 'open' ELSE request_status END
-    WHERE id = ? AND user_id = ?
+      INSERT INTO accepted_requests (request_id, user_id, status)
+      VALUES (?, ?, 'accepted')
+      ON DUPLICATE KEY UPDATE status = 'accepted';
   `;
 
-  db.query(query, [start_location, end_location, meeting_time, request_type, id, userId], (err, result) => {
-    if (err) {
-      res.status(500).send({ error: err.message });
-    } else if (result.affectedRows === 0) {
-      res.status(404).send({ error: 'Request not found or not authorized' });
-    } else {
-      res.status(200).send({ message: 'Request updated successfully and reopened if previously canceled.' });
-    }
-  });
-});
-
-// Delete a user request (protected route)
-app.delete('/user/request/:id', authenticateToken, (req, res) => {
-  const userId = req.user.id;
-  const requestId = req.params.id;
-
-  // First, delete all related comments and likes
-  const deleteCommentsQuery = `DELETE FROM comments WHERE request_id = ?`;
-  const deleteLikesQuery = `DELETE FROM likes WHERE request_id = ?`;
-
-  db.query(deleteCommentsQuery, [requestId], (err) => {
-    if (err) {
-      return res.status(500).send({ error: 'Failed to delete related comments' });
-    }
-
-    db.query(deleteLikesQuery, [requestId], (err) => {
+  db.query(query, [requestId, userId], (err, result) => {
       if (err) {
-        return res.status(500).send({ error: 'Failed to delete related likes' });
+          console.error('Error accepting the request:', err);
+          return res.status(500).json({ error: 'Failed to accept the request.' });
       }
-
-      // Now delete the request
-      const deleteRequestQuery = `DELETE FROM requests WHERE id = ? AND user_id = ?`;
-      db.query(deleteRequestQuery, [requestId, userId], (err, result) => {
-        if (err) {
-          return res.status(500).send({ error: 'Failed to delete request' });
-        } else if (result.affectedRows === 0) {
-          return res.status(404).send({ error: 'Request not found or not authorized' });
-        } else {
-          res.status(200).send({ message: 'Request deleted successfully' });
-        }
-      });
-    });
+      res.status(200).json({ message: 'Request accepted successfully!' });
   });
 });
 
-// Cancel a request
-app.post('/user/request/cancel', authenticateToken, (req, res) => {
-  const { requestId } = req.body;
-  const userId = req.user.id;
-
-  const query = `UPDATE requests SET request_status = 'canceled' WHERE id = ? AND user_id = ?`;
-  db.query(query, [requestId, userId], (err, result) => {
-    if (err) {
-      return res.status(500).send({ error: 'Failed to cancel request' });
-    } else if (result.affectedRows === 0) {
-      return res.status(404).send({ error: 'Request not found or not authorized' });
-    } else {
-      res.status(200).send({ message: 'Request canceled successfully' });
-    }
-  });
-});
-
-// Like a request
-app.post('/requests/:id/like', authenticateToken, (req, res) => {
+// Decline a user for a request
+app.post('/requests/:id/decline', authenticateToken, (req, res) => {
   const requestId = req.params.id;
-  const userId = req.user.id;
+  const userId = req.body.userId;
 
-  const query = `INSERT INTO likes (request_id, user_id) VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE request_id = request_id;`;
-
-  db.query(query, [requestId, userId], (err, result) => {
-    if (err) {
-      res.status(500).send({ error: 'Failed to like the request' });
-    } else {
-      res.status(200).send({ message: 'Request liked successfully!' });
-    }
-  });
-});
-
-// Comment on a request
-app.post('/requests/:id/comment', authenticateToken, (req, res) => {
-  const requestId = req.params.id;
-  const { comment } = req.body;
-  const userId = req.user.id;
-
-  const insertCommentQuery = 'INSERT INTO comments (request_id, user_id, comment) VALUES (?, ?, ?)';
-  db.query(insertCommentQuery, [requestId, userId, comment], (err, result) => {
-    if (err) {
-      res.status(500).send({ error: 'Failed to post comment' });
-    } else {
-      const selectCommentQuery = `
-        SELECT c.comment, u.name, u.surname, c.user_id
-        FROM comments c
-        JOIN users u ON c.user_id = u.id
-        WHERE c.id = ?
-      `;
-      db.query(selectCommentQuery, [result.insertId], (err, commentDetails) => {
-        if (err) {
-          res.status(500).send({ error: 'Failed to retrieve comment details' });
-        } else {
-          const user = commentDetails[0];
-          const surnameInitials = user.surname
-            .split(' ')
-            .map(part => part[0])
-            .join('');
-
-          res.status(200).send({
-            comment: user.comment,
-            name: user.name,
-            surname_initials: surnameInitials,
-            user_id: user.user_id
-          });
-        }
-      });
-    }
-  });
-});
-
-// Get all open requests (protected route)
-app.get('/requests', authenticateToken, (req, res) => {
   const query = `
-    SELECT r.id, r.start_location, r.end_location, r.meeting_time, r.request_type, u.name, u.surname, u.profile_image
-    FROM requests r
-    JOIN users u ON r.user_id = u.id
-    WHERE r.request_status = "open"
+      DELETE FROM accepted_requests
+      WHERE request_id = ? AND user_id = ?;
   `;
-  db.query(query, (err, results) => {
-    if (err) {
-      res.status(500).send({ error: err.message });
-    } else {
-      res.status(200).json(results);
-    }
+
+  db.query(query, [requestId, userId], (err, result) => {
+      if (err) {
+          console.error('Error declining the user:', err);
+          return res.status(500).json({ error: 'Failed to decline the user.' });
+      }
+      res.status(200).json({ message: 'User declined successfully!' });
   });
 });
 
-// Create a new travel request (protected route)
-app.post('/request', authenticateToken, (req, res) => {
-  const { start_location, end_location, meeting_time, request_type } = req.body;
-  const user_id = req.user.id;
+// Get user profile by ID (protected route)
+app.get('/user/:userId', authenticateToken, (req, res) => {
+  const userId = req.params.userId;
 
-  if (!start_location || !end_location || !meeting_time || !request_type) {
-    return res.status(400).send({ error: 'All fields are required' });
-  }
-
-  const query = 'INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type) VALUES (?, ?, ?, ?, ?)';
-  db.query(query, [user_id, start_location, end_location, meeting_time, request_type], (err, result) => {
+  const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
+  db.query(query, [userId], (err, results) => {
     if (err) {
-      res.status(500).send({ error: err.message });
+      return res.status(500).send({ error: 'Error fetching user profile' });
+    } else if (results.length === 0) {
+      return res.status(404).send({ error: 'User not found' });
     } else {
-      res.status(200).send({ message: 'Request created successfully!' });
+      return res.status(200).json(results[0]);
     }
   });
 });
