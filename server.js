@@ -31,20 +31,6 @@ const dbOptions = {
 
 const db = mysql.createPool(dbOptions);
 
-// JWT authentication middleware
-const authenticateToken = (req, res, next) => {
-  const token = req.headers['authorization'];
-  if (!token) return res.status(401).send({ error: 'Access denied. No token provided.' });
-
-  const actualToken = token.split(' ')[1];
-
-  jwt.verify(actualToken, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).send({ error: 'Invalid token.' });
-    req.user = user;
-    next();
-  });
-};
-
 // Configure multer for file storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -95,7 +81,7 @@ app.post('/login', async (req, res) => {
 });
 
 // Create a new request (protected route)
-app.post('/request', authenticateToken, (req, res) => {
+app.post('/request', (req, res) => {
   const { start_location, end_location, meeting_time, request_type } = req.body;
   const userId = req.user.id;
 
@@ -117,7 +103,7 @@ app.post('/request', authenticateToken, (req, res) => {
 });
 
 // Get user profile (protected route)
-app.get('/user/profile', authenticateToken, (req, res) => {
+app.get('/user/profile', (req, res) => {
   const userId = req.user.id;
 
   const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
@@ -134,7 +120,7 @@ app.get('/user/profile', authenticateToken, (req, res) => {
 });
 
 // Update user profile (protected route)
-app.post('/user/profile/update', authenticateToken, upload.single('image'), (req, res) => {
+app.post('/user/profile/update', upload.single('image'), (req, res) => {
   const userId = req.user.id;
   const { name, surname, email, bio } = req.body;
   if (!email) {
