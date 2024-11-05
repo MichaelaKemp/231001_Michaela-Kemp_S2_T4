@@ -9,6 +9,11 @@ const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 const dbUrl = process.env.JAWSDB_URL || process.env.DATABASE_URL;
+const app = express(); // Add this line to initialize the app
+
+app.use(cors()); // Allow all origins (customize as needed)
+app.use(bodyParser.json()); // Parse JSON bodies
+app.use(bodyParser.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // Database connection
 const db = mysql.createConnection(dbUrl);
