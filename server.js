@@ -21,71 +21,29 @@ app.use(cors({
 // Ensure this is placed right after CORS and before any routes
 app.use(express.json());
 
-const dbUrl = new URL(process.env.DATABASE_URL || process.env.JAWSDB_URL);
+const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
-  host: dbUrl.hostname,
-  user: dbUrl.username,
-  password: dbUrl.password,
-  database: dbUrl.pathname.slice(1),
+  host: new URL(dbUrl).hostname,
+  user: new URL(dbUrl).username,
+  password: new URL(dbUrl).password,
+  database: new URL(dbUrl).pathname.slice(1),
 };
+
 const db = mysql.createPool(dbOptions);
 
-const cookieParser = require('cookie-parser');
-app.use(cookieParser());
+// JWT authentication middleware
+const authenticateToken = (req, res, next) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(401).send({ error: 'Access denied. No token provided.' });
 
-app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
+  const actualToken = token.split(' ')[1];
 
-  try {
-    const [results] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-    if (results.length === 0) {
-      return res.status(401).send({ error: 'User not found!' });
-    }
-
-    const user = results[0];
-    const passwordMatch = bcrypt.compareSync(password, user.password);
-
-    if (passwordMatch) {
-      const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-      // Set token as an HTTP-only cookie
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: false,           // Only for HTTPS in production
-        sameSite: 'Strict',
-        maxAge: 60 * 60 * 1000,   // 1 hour
-      });
-
-      // Response aligned with initial structure
-      res.status(200).send({ message: 'Login successful!', token: 'dummy-token', userId: user.id });
-    } else {
-      res.status(401).send({ error: 'Invalid password!' });
-    }
-  } catch (error) {
-    console.error('Error during login:', error);
-    res.status(500).send({ error: error.message });
-  }
-});
-
-app.post('/api/refresh-token', (req, res) => {
-  const token = req.cookies.token; // Retrieve token from cookies
-  if (!token) return res.status(401).json({ error: 'No token provided' });
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
-
-    // Generate a new token and set it as an HTTP-only cookie
-    const newToken = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.cookie('token', newToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Strict',
-      maxAge: 60 * 60 * 1000, // 1 hour
-    });
-
-    res.status(200).json({ message: 'Token refreshed successfully' });
+  jwt.verify(actualToken, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).send({ error: 'Invalid token.' });
+    req.user = user;
+    next();
   });
-});
+};
 
 // Configure multer for file storage
 const storage = multer.memoryStorage();
@@ -94,45 +52,40 @@ const upload = multer({ storage: storage });
 // Register User
 app.post('/api/register', async (req, res) => {
   const { name, surname, email, password } = req.body;
-  console.log("Register request received with:", { name, surname, email, password });
+  const hashedPassword = bcrypt.hashSync(password, 10);
 
   try {
-    const hashedPassword = bcrypt.hashSync(password, 10);
     await db.query('INSERT INTO users (name, surname, email, password) VALUES (?, ?, ?, ?)', [name, surname, email, hashedPassword]);
-    res.status(200).json({ message: 'User registered successfully!' });
+    res.status(200).send({ message: 'User registered successfully!' });
   } catch (error) {
-    console.error('Error during registration:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).send({ error: error.message });
   }
 });
 
 // Login User
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
+  console.log('Login request received with:', { email, password });
 
   try {
     const [results] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+    console.log('Database query results:', results);
+
     if (results.length === 0) {
+      console.error('User not found');
       return res.status(401).send({ error: 'User not found!' });
     }
 
     const user = results[0];
     const passwordMatch = bcrypt.compareSync(password, user.password);
+    console.log('Password match status:', passwordMatch);
 
     if (passwordMatch) {
       const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-      // Set token as an HTTP-only cookie
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: false,           // Only for HTTPS in production
-        sameSite: 'Strict',
-        maxAge: 60 * 60 * 1000,   // 1 hour
-      });
-
-      // Response aligned with initial structure
-      res.status(200).send({ message: 'Login successful!', token: 'dummy-token', userId: user.id });
+      console.log('Token generated:', token);
+      res.status(200).send({ message: 'Login successful!', token, userId: user.id });
     } else {
+      console.error('Invalid password');
       res.status(401).send({ error: 'Invalid password!' });
     }
   } catch (error) {
@@ -142,37 +95,48 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Create a new request (protected route)
-app.post('/api/request', async (req, res) => {
+app.post('/api/request', authenticateToken, (req, res) => {
   const { start_location, end_location, meeting_time, request_type } = req.body;
-  const userId = req.user?.id || req.body.userId;
+  const userId = req.user.id;
 
-  console.log("Request creation received with:", { start_location, end_location, meeting_time, request_type });
+  console.log("Request Data:", { start_location, end_location, meeting_time, request_type, userId });
 
-  try {
-    const query = 'INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type, request_status) VALUES (?, ?, ?, ?, ?, "open")';
-    await db.query(query, [userId, start_location, end_location, meeting_time, request_type]);
-    res.status(200).send({ message: 'Request created successfully!' });
-  } catch (error) {
-    console.error('Error creating request:', error);
-    res.status(500).send({ error: 'Failed to create request' });
-  }
+  const query = 
+    `INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type, request_status)
+    VALUES (?, ?, ?, ?, ?, 'open')`
+  ;
+
+  db.query(query, [userId, start_location, end_location, meeting_time, request_type], (err, result) => {
+    if (err) {
+      console.error('Error saving request to database:', err);
+      res.status(500).send({ error: 'Failed to create request' });
+    } else {
+      res.status(200).send({ message: 'Request created successfully!' });
+    }
+  });
 });
 
 // Get user profile (protected route)
-app.get('/user/profile', authenticateToken, async (req, res) => {
+app.get('/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
-  try {
-    const [results] = await db.query('SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?', [userId]);
-    if (results.length === 0) return res.status(404).send({ error: 'User not found' });
+  const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      res.status(500).send({ error: err.message });
+    } else if (results.length === 0) {
+      res.status(404).send({ error: 'User not found' });
+    } else {
+      const user = results[0];
 
-    const user = results[0];
-    if (user.profile_image) user.profile_image = user.profile_image.toString('base64');
-    res.status(200).json(user);
-  } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).send({ error: 'Error fetching profile' });
-  }
+      // Convert image to base64 if it exists
+      if (user.profile_image) {
+        user.profile_image = user.profile_image.toString('base64');
+      }
+
+      res.status(200).json(user);
+    }
+  });
 });
 
 // Update user profile (protected route)
@@ -194,7 +158,7 @@ app.post('/user/profile/update', authenticateToken, upload.single('image'), (req
     values.push(profileImage);
   }
 
-  query += ` WHERE id = ?`;
+  query +=  `WHERE id = ?`;
   values.push(userId);
 
   db.query(query, values, (err, result) => {
@@ -213,8 +177,8 @@ app.post('/user/profile/update', authenticateToken, upload.single('image'), (req
 app.post('/user/request/update', authenticateToken, (req, res) => {
   const { request_id, start_location, end_location, meeting_time, request_type } = req.body;
 
-  const query = `
-    UPDATE requests
+  const query = 
+    `UPDATE requests
     SET start_location = ?, end_location = ?, meeting_time = ?, request_type = ?
     WHERE id = ? AND user_id = ?`;
 
@@ -229,41 +193,44 @@ app.post('/user/request/update', authenticateToken, (req, res) => {
 });
 
 // Fetch all open requests along with the user's details
-app.get('/all-open-requests', async (req, res) => {
-  try {
-    const [requests] = await db.query(`
-      SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
-             r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
-      FROM requests r
-      JOIN users u ON r.user_id = u.id
-      WHERE r.request_status = 'open'
-      ORDER BY r.meeting_time DESC
-    `);
+app.get('/all-open-requests', authenticateToken, (req, res) => {
+  const fetchRequestsQuery = 
+    `SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
+           r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
+    FROM requests r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.request_status = 'open'
+    ORDER BY r.meeting_time DESC`
+  ;
 
+  db.query(fetchRequestsQuery, (err, requests) => {
+    if (err) {
+      return res.status(500).send({ error: 'Error fetching requests' });
+    }
+
+    // Convert each profile_image to Base64
     const requestsWithBase64Images = requests.map(request => {
       if (request.profile_image) {
         request.profile_image = request.profile_image.toString('base64');
-      }
+        request.image_type = 'jpeg'; // Set this based on actual format (e.g., 'jpeg' or 'png')
+      }    
       return request;
-    });
+    });  
 
     res.status(200).json(requestsWithBase64Images);
-  } catch (error) {
-    console.error('Fetch requests error:', error);
-    res.status(500).json({ error: 'Failed to fetch open requests' });
-  }
+  });
 });
 
 // Fetch all requests and accepted users
 app.get('/user/requests', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
-  const fetchRequestsQuery = `
-    SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, r.created_at, r.meeting_time, r.request_type
+  const fetchRequestsQuery = 
+    `SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, r.created_at, r.meeting_time, r.request_type
     FROM requests r
     WHERE r.user_id = ?
-    ORDER BY r.created_at DESC
-  `;
+    ORDER BY r.created_at DESC`
+  ;
 
   db.query(fetchRequestsQuery, [userId], (err, requests) => {
     if (err) {
@@ -271,12 +238,12 @@ app.get('/user/requests', authenticateToken, (req, res) => {
     }
 
     const fetchAcceptedUsersPromises = requests.map(request => {
-      const acceptedUsersQuery = `
-        SELECT u.id, u.name, u.surname, u.profile_image
+      const acceptedUsersQuery = 
+        `SELECT u.id, u.name, u.surname, u.profile_image
         FROM accepted_requests ar
         JOIN users u ON ar.user_id = u.id
-        WHERE ar.request_id = ?
-      `;
+        WHERE ar.request_id = ?`
+      ;
 
       return new Promise((resolve, reject) => {
         db.query(acceptedUsersQuery, [request.request_id], (err, acceptedUsers) => {
@@ -304,11 +271,11 @@ app.post('/user/request/reopen', authenticateToken, (req, res) => {
   const userId = req.user.id;
   const { id, start_location, end_location, meeting_time, request_type } = req.body;
 
-  const query = `
-    UPDATE requests
+  const query = 
+    `UPDATE requests
     SET start_location = ?, end_location = ?, meeting_time = ?, request_type = ?, request_status = 'open'
-    WHERE id = ? AND user_id = ? AND request_status = 'closed'
-  `;
+    WHERE id = ? AND user_id = ? AND request_status = 'closed'`
+  ;
 
   db.query(query, [start_location, end_location, meeting_time, request_type, id, userId], (err, result) => {
     if (err) {
@@ -330,11 +297,11 @@ app.put('/requests/:id', authenticateToken, (req, res) => {
   // Determine the correct status based on the meeting time
   const updatedStatus = new Date(meeting_time) > new Date() ? 'open' : request_status;
 
-  const updateRequestQuery = `
-    UPDATE requests
+  const updateRequestQuery = 
+    `UPDATE requests
     SET start_location = ?, end_location = ?, meeting_time = ?, request_type = ?, request_status = ?
-    WHERE id = ? AND user_id = ?
-  `;
+    WHERE id = ? AND user_id = ?`
+  ;
 
   db.query(updateRequestQuery, [start_location, end_location, meeting_time, request_type, updatedStatus, requestId, userId], (err, result) => {
     if (err) {
@@ -346,11 +313,11 @@ app.put('/requests/:id', authenticateToken, (req, res) => {
 
     // If the request status is 'closed', update only pending statuses in accepted_requests to 'declined'
     if (updatedStatus === 'closed') {  // Use updatedStatus here to check if the status is closed
-      const updatePendingStatusQuery = `
-        UPDATE accepted_requests
+      const updatePendingStatusQuery = 
+        `UPDATE accepted_requests
         SET creator_status = 'declined'
-        WHERE request_id = ? AND creator_status = 'pending'
-      `;
+        WHERE request_id = ? AND creator_status = 'pending'`
+      ;
 
       db.query(updatePendingStatusQuery, [requestId], (err, result) => {
         if (err) {
@@ -373,10 +340,10 @@ app.delete('/requests/:id', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   // First, delete accepted users related to the request
-  const deleteAcceptedUsersQuery = `
-    DELETE FROM accepted_requests
-    WHERE request_id = ?
-  `;
+  const deleteAcceptedUsersQuery = 
+    `DELETE FROM accepted_requests
+    WHERE request_id = ?`
+  ;
 
   db.query(deleteAcceptedUsersQuery, [requestId], (err) => {
     if (err) {
@@ -385,10 +352,10 @@ app.delete('/requests/:id', authenticateToken, (req, res) => {
     }
 
     // Now delete the request itself
-    const deleteRequestQuery = `
-      DELETE FROM requests
-      WHERE id = ? AND user_id = ?
-    `;
+    const deleteRequestQuery = 
+      `DELETE FROM requests
+      WHERE id = ? AND user_id = ?`
+    ;
 
     db.query(deleteRequestQuery, [requestId, userId], (err, result) => {
       if (err) {
@@ -407,11 +374,7 @@ app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
-  const query = `
-      UPDATE requests
-      SET request_status = 'canceled'
-      WHERE id = ? AND user_id = ?
-  `;
+  const query = `UPDATE requests SET start_location = ?, end_location = ?, meeting_time = ?, request_type = ? WHERE id = ? AND user_id = ?`;
 
   db.query(query, [requestId, userId], (err, result) => {
     if (err) {
@@ -425,28 +388,56 @@ app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
 });
 
 // Accept a request (protected route)
-app.post('/requests/:id/accept', async (req, res) => {
+app.post('/requests/:id/accept', authenticateToken, (req, res) => {
   const requestId = req.params.id;
-  const userId = req.user?.id || req.body.userId;
+  const userId = req.user.id;
 
-  try {
-    const [results] = await db.query(`SELECT * FROM requests WHERE id = ? AND request_status = 'open'`, [requestId]);
+  // First, check if the request exists and is open
+  const checkRequestQuery = 
+      `SELECT * FROM requests 
+      WHERE id = ? AND request_status = 'open'`
+  ;
 
-    if (results.length === 0) {
-      return res.status(404).json({ error: 'Request not found or not open for acceptance' });
-    }
+  db.query(checkRequestQuery, [requestId], (err, results) => {
+      if (err) {
+          console.error('Error checking request:', err);
+          return res.status(500).json({ error: 'Failed to check request status' });
+      }
 
-    await db.query(`
-      INSERT INTO accepted_requests (request_id, user_id, status, creator_status)
-      VALUES (?, ?, 'accepted', 'pending')
-      ON DUPLICATE KEY UPDATE status = 'accepted';
-    `, [requestId, userId]);
+      if (results.length === 0) {
+          return res.status(404).json({ error: 'Request not found or is not open for acceptance' });
+      }
 
-    res.status(200).json({ message: 'Request accepted successfully!' });
-  } catch (error) {
-    console.error('Error accepting request:', error);
-    res.status(500).json({ error: 'Failed to accept the request' });
-  }
+      // Update the request to mark it as "accepted" in accepted_requests table
+      const acceptRequestQuery = 
+          `INSERT INTO accepted_requests (request_id, user_id, status, creator_status)
+          VALUES (?, ?, 'accepted', 'pending')
+          ON DUPLICATE KEY UPDATE status = 'accepted'`;
+      ;
+
+      db.query(acceptRequestQuery, [requestId, userId], (err, result) => {
+          if (err) {
+              console.error('Error accepting request:', err);
+              return res.status(500).json({ error: 'Failed to accept the request' });
+          }
+
+          // Update the main request status if needed (optional)
+          const updateRequestStatusQuery = 
+              `UPDATE requests
+              SET request_status = 'accepted'
+              WHERE id = ?`
+          ;
+
+          db.query(updateRequestStatusQuery, [requestId], (err, result) => {
+              if (err) {
+                  console.error('Error updating request status:', err);
+                  return res.status(500).json({ error: 'Failed to update request status' });
+              }
+
+              res.status(200).json({ message: 'Request accepted successfully!' });
+          });
+      });
+  });
 });
 
 app.post('/requests/:id/respond', authenticateToken, (req, res) => {
@@ -458,17 +449,17 @@ app.post('/requests/:id/respond', authenticateToken, (req, res) => {
   let message;
 
   if (action === 'accept') {
-    query = `
-      UPDATE accepted_requests
+    query = 
+      `UPDATE accepted_requests
       SET status = 'accepted'
-      WHERE request_id = ? AND user_id = ?;
-    `;
+      WHERE request_id = ? AND user_id = ?`;
+    ;
     message = 'User accepted successfully!';
   } else if (action === 'decline') {
-    query = `
-      DELETE FROM accepted_requests
-      WHERE request_id = ? AND user_id = ?;
-    `;
+    query = 
+      `DELETE FROM accepted_requests
+      WHERE request_id = ? AND user_id = ?`;
+    ;
     message = 'User declined successfully!';
   } else {
     return res.status(400).json({ error: 'Invalid action provided' });
@@ -513,43 +504,47 @@ app.get('/proxy-distance', async (req, res) => {
       params: {
         origins,
         destinations,
-        key: process.env.GOOGLE_MAPS_API_KEY,
-      },
+        key: process.env.GOOGLE_MAPS_API_KEY, // Store your key in .env for security
+      }
     });
     res.json(response.data);
   } catch (error) {
-    console.error('Distance matrix proxy error:', error);
-    res.status(500).json({ error: 'Failed to fetch distance from Google API' });
+    console.error("Error in proxy distance request:", error);
+    res.status(500).send("Error fetching distance from Google API");
   }
 });
 
 // Endpoint to like a user's profile
-app.post('/user/:userId/like', async (req, res) => {
+app.post('/user/:userId/like', authenticateToken, async (req, res) => {
   const { userId } = req.params;
-  const likedBy = req.user?.id || req.body.userId;
+  const likedBy = req.user.id;
 
-  try {
-    await db.query(`INSERT INTO likes (user_id, liked_by) VALUES (?, ?) ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP`, [userId, likedBy]);
-    res.status(200).send({ message: 'Like added successfully!' });
-  } catch (error) {
-    console.error('Error adding like:', error);
-    res.status(500).send({ error: 'Failed to add like' });
-  }
+  const query = `INSERT INTO likes (user_id, liked_by) VALUES (?, ?) ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP`;
+
+  db.query(query, [userId, likedBy], (err) => {
+      if (err) {
+          console.error("Error adding like:", err);
+          return res.status(500).send({ error: 'Failed to add like' });
+      }
+      res.status(200).send({ message: 'Like added successfully!' });
+  });
 });
 
 // Endpoint to add a comment to a user's profile
-app.post('/user/:userId/comment', async (req, res) => {
+app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
   const { userId } = req.params;
-  const commentedBy = req.user?.id || req.body.userId;
+  const commentedBy = req.user.id;
   const { comment } = req.body;
 
-  try {
-    await db.query(`INSERT INTO comments (user_id, commented_by, comment) VALUES (?, ?, ?)`, [userId, commentedBy, comment]);
-    res.status(200).send({ message: 'Comment added successfully!' });
-  } catch (error) {
-    console.error("Error adding comment:", error);
-    res.status(500).send({ error: 'Failed to add comment' });
-  }
+  const query = `INSERT INTO comments (user_id, commented_by, comment) VALUES (?, ?, ?)`;
+
+  db.query(query, [userId, commentedBy, comment], (err) => {
+      if (err) {
+          console.error("Error adding comment:", err);
+          return res.status(500).send({ error: 'Failed to add comment' });
+      }
+      res.status(200).send({ message: 'Comment added successfully!' });
+  });
 });
 
 // Endpoint to get the like count for a user's profile
@@ -571,13 +566,13 @@ app.get('/user/:userId/likes', authenticateToken, (req, res) => {
 app.get('/user/:userId/comments', authenticateToken, (req, res) => {
   const { userId } = req.params;
 
-  const query = `
-      SELECT c.comment, c.created_at, u.name AS commented_by_name, u.surname AS commented_by_surname 
+  const query = 
+     ` SELECT c.comment, c.created_at, u.name AS commented_by_name, u.surname AS commented_by_surname 
       FROM comments c
       JOIN users u ON c.commented_by = u.id
       WHERE c.user_id = ?
-      ORDER BY c.created_at DESC
-  `;
+      ORDER BY c.created_at DESC`
+  ;
 
   db.query(query, [userId], (err, results) => {
       if (err) {
@@ -592,21 +587,21 @@ app.get('/analytics/:userId', authenticateToken, async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const completedTripsQuery = `
-      SELECT id, start_location, end_location, DATE(created_at) AS travelDate
+    const completedTripsQuery = 
+      `SELECT id, start_location, end_location, DATE(created_at) AS travelDate
       FROM requests
-      WHERE user_id = ? AND request_status = 'closed';
-    `;
+      WHERE user_id = ? AND request_status = 'closed'`;
+    ;
     const [completedTripsResults] = await db.query(completedTripsQuery, [userId]);
 
     // Additional queries
-    const tripsAcceptedQuery = `
-      SELECT COUNT(*) AS tripsAccepted
+    const tripsAcceptedQuery = 
+      `SELECT COUNT(*) AS tripsAccepted
       FROM accepted_requests
       WHERE user_id = ? 
         AND status = 'accepted' 
-        AND creator_status = 'accepted';
-    `;
+        AND creator_status = 'accepted'`;
+    ;
     const [tripsAcceptedResults] = await db.query(tripsAcceptedQuery, [userId]);
 
     const totalRequestsQuery = `SELECT COUNT(*) AS totalRequests FROM requests WHERE user_id = ?;`;
@@ -629,15 +624,6 @@ app.get('/analytics/:userId', authenticateToken, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }
-});
-
-app.post('/api/logout', (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'Strict',
-  });
-  res.json({ message: 'Logged out successfully' });
 });
 
 // Start the server
