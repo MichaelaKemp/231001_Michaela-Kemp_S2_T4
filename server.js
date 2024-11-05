@@ -13,7 +13,6 @@ require('dotenv').config();
 const app = express();
 
 const cache = new NodeCache({ stdTTL: 300, checkperiod: 320 }); // 5-minute default TTL, check every 320 seconds
-cache.set('allOpenRequests', requests, 600); // Cache for 10 minutes
 
 const allowedOrigins = ['https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com'];
 
@@ -207,7 +206,9 @@ app.post('/user/request/update', (req, res) => {
 });
 
 // Fetch all open requests along with the user's details
-app.get('/all-open-requests', (req, res) => {
+// Fetch all open requests along with the user's details
+app.get('/all-open-requests', async (req, res) => {
+  // Check if data is already cached
   const cachedRequests = cache.get('allOpenRequests');
   if (cachedRequests) {
     return res.status(200).json(cachedRequests);
@@ -222,14 +223,14 @@ app.get('/all-open-requests', (req, res) => {
     ORDER BY r.meeting_time DESC
   `;
 
-  db.query(fetchRequestsQuery, (err, requests) => {
-    if (err) {
-      return res.status(500).send({ error: 'Error fetching requests' });
-    }
-
-    cache.set('allOpenRequests', requests); // Cache the result
+  try {
+    const [requests] = await db.query(fetchRequestsQuery);
+    cache.set('allOpenRequests', requests, 600); // Cache the result for 10 minutes
     res.status(200).json(requests);
-  });
+  } catch (err) {
+    console.error('Error fetching requests:', err);
+    res.status(500).send({ error: 'Error fetching requests' });
+  }
 });
 
 // Fetch all requests and accepted users
