@@ -11,14 +11,15 @@ const axios = require('axios');
 require('dotenv').config();
 const app = express();
 
-const allowedOrigins = ['*'];
+const allowedOrigins = ['https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com'];
 
-// Add CORS middleware to handle all OPTIONS requests
-app.options('*', cors({
+app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
+      console.log(`Allowed origin: ${origin}`); // Log the allowed origin
+      callback(null, origin); // Set to requesting origin if allowed
     } else {
+      console.log(`Blocked origin: ${origin}`); // Log the blocked origin
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -27,14 +28,7 @@ app.options('*', cors({
   credentials: true,
 }));
 
-// Middleware to set headers for all responses
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  next();
-});
+
 
 
 // Ensure this is placed right after CORS and before any routes
