@@ -12,11 +12,13 @@ require('dotenv').config();
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL, 
+  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
+
+// Ensure this is placed right after CORS and before any routes
 app.use(express.json());
 
 const dbUrl = new URL(process.env.DATABASE_URL || process.env.JAWSDB_URL);
@@ -28,16 +30,62 @@ const dbOptions = {
 };
 const db = mysql.createPool(dbOptions);
 
-const authenticateToken = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
+const cookieParser = require('cookie-parser');
+app.use(cookieParser());
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const [results] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+    if (results.length === 0) {
+      return res.status(401).send({ error: 'User not found!' });
+    }
+
+    const user = results[0];
+    const passwordMatch = bcrypt.compareSync(password, user.password);
+
+    if (passwordMatch) {
+      const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+      // Set token as an HTTP-only cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false,           // Only for HTTPS in production
+        sameSite: 'Strict',
+        maxAge: 60 * 60 * 1000,   // 1 hour
+      });
+
+      // Response aligned with initial structure
+      res.status(200).send({ message: 'Login successful!', token: 'dummy-token', userId: user.id });
+    } else {
+      res.status(401).send({ error: 'Invalid password!' });
+    }
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).send({ error: error.message });
+  }
+});
+
+app.post('/api/refresh-token', (req, res) => {
+  const token = req.cookies.token; // Retrieve token from cookies
   if (!token) return res.status(401).json({ error: 'No token provided' });
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid token' });
-    req.user = user;
-    next();
+
+    // Generate a new token and set it as an HTTP-only cookie
+    const newToken = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.cookie('token', newToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Strict',
+      maxAge: 60 * 60 * 1000, // 1 hour
+    });
+
+    res.status(200).json({ message: 'Token refreshed successfully' });
   });
-};
+});
 
 // Configure multer for file storage
 const storage = multer.memoryStorage();
@@ -46,76 +94,85 @@ const upload = multer({ storage: storage });
 // Register User
 app.post('/api/register', async (req, res) => {
   const { name, surname, email, password } = req.body;
+  console.log("Register request received with:", { name, surname, email, password });
+
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await db.query(
-      'INSERT INTO users (name, surname, email, password) VALUES (?, ?, ?, ?)', 
-      [name, surname, email, hashedPassword]
-    );
-    res.status(200).json({ message: 'User registered successfully' });
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    await db.query('INSERT INTO users (name, surname, email, password) VALUES (?, ?, ?, ?)', [name, surname, email, hashedPassword]);
+    res.status(200).json({ message: 'User registered successfully!' });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to register user' });
+    console.error('Error during registration:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 // Login User
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
+
   try {
     const [results] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-    if (results.length === 0) return res.status(401).json({ error: 'User not found' });
+    if (results.length === 0) {
+      return res.status(401).send({ error: 'User not found!' });
+    }
 
     const user = results[0];
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) return res.status(401).json({ error: 'Invalid password' });
+    const passwordMatch = bcrypt.compareSync(password, user.password);
 
-    const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.status(200).json({ message: 'Login successful', token, userId: user.id });
+    if (passwordMatch) {
+      const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+      // Set token as an HTTP-only cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false,           // Only for HTTPS in production
+        sameSite: 'Strict',
+        maxAge: 60 * 60 * 1000,   // 1 hour
+      });
+
+      // Response aligned with initial structure
+      res.status(200).send({ message: 'Login successful!', token: 'dummy-token', userId: user.id });
+    } else {
+      res.status(401).send({ error: 'Invalid password!' });
+    }
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Error during login:', error);
+    res.status(500).send({ error: error.message });
   }
 });
 
 // Create a new request (protected route)
-app.post('/api/request', authenticateToken, async (req, res) => {
+app.post('/api/request', async (req, res) => {
   const { start_location, end_location, meeting_time, request_type } = req.body;
-  const userId = req.user.id;
+  const userId = req.user?.id || req.body.userId;
+
+  console.log("Request creation received with:", { start_location, end_location, meeting_time, request_type });
+
   try {
-    await db.query(
-      `INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type, request_status) 
-      VALUES (?, ?, ?, ?, ?, 'open')`, 
-      [userId, start_location, end_location, meeting_time, request_type]
-    );
-    res.status(200).json({ message: 'Request created successfully' });
+    const query = 'INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type, request_status) VALUES (?, ?, ?, ?, ?, "open")';
+    await db.query(query, [userId, start_location, end_location, meeting_time, request_type]);
+    res.status(200).send({ message: 'Request created successfully!' });
   } catch (error) {
-    console.error('Create request error:', error);
-    res.status(500).json({ error: 'Failed to create request' });
+    console.error('Error creating request:', error);
+    res.status(500).send({ error: 'Failed to create request' });
   }
 });
 
 // Get user profile (protected route)
-app.get('/user/profile', authenticateToken, (req, res) => {
+app.get('/user/profile', authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
-  const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
-  db.query(query, [userId], (err, results) => {
-    if (err) {
-      res.status(500).send({ error: err.message });
-    } else if (results.length === 0) {
-      res.status(404).send({ error: 'User not found' });
-    } else {
-      const user = results[0];
+  try {
+    const [results] = await db.query('SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?', [userId]);
+    if (results.length === 0) return res.status(404).send({ error: 'User not found' });
 
-      // Convert image to base64 if it exists
-      if (user.profile_image) {
-        user.profile_image = user.profile_image.toString('base64');
-      }
-
-      res.status(200).json(user);
-    }
-  });
+    const user = results[0];
+    if (user.profile_image) user.profile_image = user.profile_image.toString('base64');
+    res.status(200).json(user);
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).send({ error: 'Error fetching profile' });
+  }
 });
 
 // Update user profile (protected route)
@@ -172,7 +229,7 @@ app.post('/user/request/update', authenticateToken, (req, res) => {
 });
 
 // Fetch all open requests along with the user's details
-app.get('/all-open-requests', authenticateToken, async (req, res) => {
+app.get('/all-open-requests', async (req, res) => {
   try {
     const [requests] = await db.query(`
       SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
@@ -368,56 +425,28 @@ app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
 });
 
 // Accept a request (protected route)
-app.post('/requests/:id/accept', authenticateToken, (req, res) => {
+app.post('/requests/:id/accept', async (req, res) => {
   const requestId = req.params.id;
-  const userId = req.user.id;
+  const userId = req.user?.id || req.body.userId;
 
-  // First, check if the request exists and is open
-  const checkRequestQuery = `
-      SELECT * FROM requests 
-      WHERE id = ? AND request_status = 'open'
-  `;
+  try {
+    const [results] = await db.query(`SELECT * FROM requests WHERE id = ? AND request_status = 'open'`, [requestId]);
 
-  db.query(checkRequestQuery, [requestId], (err, results) => {
-      if (err) {
-          console.error('Error checking request:', err);
-          return res.status(500).json({ error: 'Failed to check request status' });
-      }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Request not found or not open for acceptance' });
+    }
 
-      if (results.length === 0) {
-          return res.status(404).json({ error: 'Request not found or is not open for acceptance' });
-      }
+    await db.query(`
+      INSERT INTO accepted_requests (request_id, user_id, status, creator_status)
+      VALUES (?, ?, 'accepted', 'pending')
+      ON DUPLICATE KEY UPDATE status = 'accepted';
+    `, [requestId, userId]);
 
-      // Update the request to mark it as "accepted" in accepted_requests table
-      const acceptRequestQuery = `
-          INSERT INTO accepted_requests (request_id, user_id, status, creator_status)
-          VALUES (?, ?, 'accepted', 'pending')
-          ON DUPLICATE KEY UPDATE status = 'accepted';
-      `;
-
-      db.query(acceptRequestQuery, [requestId, userId], (err, result) => {
-          if (err) {
-              console.error('Error accepting request:', err);
-              return res.status(500).json({ error: 'Failed to accept the request' });
-          }
-
-          // Update the main request status if needed (optional)
-          const updateRequestStatusQuery = `
-              UPDATE requests
-              SET request_status = 'accepted'
-              WHERE id = ?
-          `;
-
-          db.query(updateRequestStatusQuery, [requestId], (err, result) => {
-              if (err) {
-                  console.error('Error updating request status:', err);
-                  return res.status(500).json({ error: 'Failed to update request status' });
-              }
-
-              res.status(200).json({ message: 'Request accepted successfully!' });
-          });
-      });
-  });
+    res.status(200).json({ message: 'Request accepted successfully!' });
+  } catch (error) {
+    console.error('Error accepting request:', error);
+    res.status(500).json({ error: 'Failed to accept the request' });
+  }
 });
 
 app.post('/requests/:id/respond', authenticateToken, (req, res) => {
@@ -495,36 +524,32 @@ app.get('/proxy-distance', async (req, res) => {
 });
 
 // Endpoint to like a user's profile
-app.post('/user/:userId/like', authenticateToken, async (req, res) => {
+app.post('/user/:userId/like', async (req, res) => {
   const { userId } = req.params;
-  const likedBy = req.user.id;
+  const likedBy = req.user?.id || req.body.userId;
 
-  const query = `INSERT INTO likes (user_id, liked_by) VALUES (?, ?) ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP`;
-
-  db.query(query, [userId, likedBy], (err) => {
-      if (err) {
-          console.error("Error adding like:", err);
-          return res.status(500).send({ error: 'Failed to add like' });
-      }
-      res.status(200).send({ message: 'Like added successfully!' });
-  });
+  try {
+    await db.query(`INSERT INTO likes (user_id, liked_by) VALUES (?, ?) ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP`, [userId, likedBy]);
+    res.status(200).send({ message: 'Like added successfully!' });
+  } catch (error) {
+    console.error('Error adding like:', error);
+    res.status(500).send({ error: 'Failed to add like' });
+  }
 });
 
 // Endpoint to add a comment to a user's profile
-app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
+app.post('/user/:userId/comment', async (req, res) => {
   const { userId } = req.params;
-  const commentedBy = req.user.id;
+  const commentedBy = req.user?.id || req.body.userId;
   const { comment } = req.body;
 
-  const query = `INSERT INTO comments (user_id, commented_by, comment) VALUES (?, ?, ?)`;
-
-  db.query(query, [userId, commentedBy, comment], (err) => {
-      if (err) {
-          console.error("Error adding comment:", err);
-          return res.status(500).send({ error: 'Failed to add comment' });
-      }
-      res.status(200).send({ message: 'Comment added successfully!' });
-  });
+  try {
+    await db.query(`INSERT INTO comments (user_id, commented_by, comment) VALUES (?, ?, ?)`, [userId, commentedBy, comment]);
+    res.status(200).send({ message: 'Comment added successfully!' });
+  } catch (error) {
+    console.error("Error adding comment:", error);
+    res.status(500).send({ error: 'Failed to add comment' });
+  }
 });
 
 // Endpoint to get the like count for a user's profile
@@ -604,6 +629,15 @@ app.get('/analytics/:userId', authenticateToken, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }
+});
+
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'Strict',
+  });
+  res.json({ message: 'Logged out successfully' });
 });
 
 // Start the server
