@@ -7,8 +7,13 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const axios = require('axios');
+const NodeCache = require('node-cache'); // Import the caching library
 require('dotenv').config();
+
 const app = express();
+
+const cache = new NodeCache({ stdTTL: 300, checkperiod: 320 }); // 5-minute default TTL, check every 320 seconds
+cache.set('allOpenRequests', requests, 600); // Cache for 10 minutes
 
 const allowedOrigins = ['https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com'];
 
@@ -142,18 +147,25 @@ app.post('/request', (req, res) => {
 // Get user profile (protected route)
 app.get('/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
-  console.log('Fetching profile for user ID:', userId);
+  
+  // Check cache first
+  const cachedProfile = cache.get(userId);
+  if (cachedProfile) {
+    return res.status(200).json(cachedProfile); // Return cached data if available
+  }
 
-  const query = 'SELECT id, name, surname, email, bio FROM users WHERE id = ?';
-  db.query(query, [userId], (err, results) => {
+  // If not in cache, fetch from the database
+  db.query('SELECT id, name, surname, email, bio FROM users WHERE id = ?', [userId], (err, results) => {
     if (err) {
-      console.error('Error querying database:', err);
-      return res.status(500).json({ error: 'Database error', details: err.message });
-    } else if (results.length === 0) {
-      console.warn('User not found for ID:', userId);
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (results.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+
     const user = results[0];
+    cache.set(userId, user); // Store the result in cache
     res.status(200).json(user);
   });
 });
@@ -196,21 +208,27 @@ app.post('/user/request/update', (req, res) => {
 
 // Fetch all open requests along with the user's details
 app.get('/all-open-requests', (req, res) => {
-  const fetchRequestsQuery = 
-    `SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
+  const cachedRequests = cache.get('allOpenRequests');
+  if (cachedRequests) {
+    return res.status(200).json(cachedRequests);
+  }
+
+  const fetchRequestsQuery = `
+    SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status,
            r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname
     FROM requests r
     JOIN users u ON r.user_id = u.id
     WHERE r.request_status = 'open'
-    ORDER BY r.meeting_time DESC`
-  ;
+    ORDER BY r.meeting_time DESC
+  `;
 
   db.query(fetchRequestsQuery, (err, requests) => {
     if (err) {
       return res.status(500).send({ error: 'Error fetching requests' });
     }
 
-    res.status(200).json(requests); // Directly send requests without modifying them
+    cache.set('allOpenRequests', requests); // Cache the result
+    res.status(200).json(requests);
   });
 });
 
