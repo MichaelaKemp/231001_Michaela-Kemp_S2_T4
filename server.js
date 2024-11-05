@@ -1,37 +1,3 @@
-const express = require('express');
-const mysql = require('mysql2/promise');
-const url = require('url');
-const bcrypt = require('bcryptjs');
-const bodyParser = require('body-parser');
-const cors = require('cors'); // Ensure this is only imported once
-const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const path = require('path');
-const axios = require('axios');
-require('dotenv').config();
-
-const app = express();
-
-// Define CORS options
-const corsOptions = {
-  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com',
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-  credentials: true,
-  allowedHeaders: "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-};
-
-// Apply CORS as the first middleware
-app.use(cors(corsOptions));
-
-// Preflight request handling for all routes
-app.options('*', (req, res) => {
-  res.header("Access-Control-Allow-Origin", "https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com");
-  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.sendStatus(200);
-});
-
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
   host: new URL(dbUrl).hostname,
