@@ -9,13 +9,18 @@ const multer = require('multer');
 const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
+
 const app = express(); // Add this line to initialize the app
 
-app.use(cors()); // Allow all origins (customize as needed)
+const corsOptions = {
+  origin: process.env.REACT_APP_BACKEND_URL, // Allow requests from frontend
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true, // Set to true if handling cookies or credentials
+};
+app.use(cors(corsOptions));
+
 app.use(bodyParser.json()); // Parse JSON bodies
 app.use(bodyParser.urlencoded({ extended: true })); // Parse URL-encoded bodies
-
-app.use(cors());
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
