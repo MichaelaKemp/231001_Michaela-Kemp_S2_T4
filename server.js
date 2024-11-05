@@ -43,6 +43,13 @@ console.log('Database connection options:', {
 
 const db = mysql.createPool(dbOptions);
 
+db.query('SELECT 1')
+  .then(() => console.log('Database connected successfully.'))
+  .catch((error) => {
+    console.error('Database connection error:', error);
+    process.exit(1); // Exit if there is a connection error
+  });
+
 // Configure multer for file storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -115,19 +122,21 @@ app.post('/request', (req, res) => {
 });
 
 // Get user profile (protected route)
-app.get('/user/profile', (req, res) => {
+app.get('/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
+  console.log('Fetching profile for user ID:', userId);
 
   const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
   db.query(query, [userId], (err, results) => {
     if (err) {
-      res.status(500).send({ error: err.message });
+      console.error('Error querying database:', err);
+      return res.status(500).json({ error: 'Database error', details: err.message });
     } else if (results.length === 0) {
-      res.status(404).send({ error: 'User not found' });
-    } else {
-      const user = results[0];
-      res.status(200).json(user); // This response should include `name`
+      console.warn('User not found for ID:', userId);
+      return res.status(404).json({ error: 'User not found' });
     }
+    const user = results[0];
+    res.status(200).json(user);
   });
 });
 
