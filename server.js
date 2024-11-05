@@ -1,3 +1,32 @@
+const express = require('express');
+const mysql = require('mysql2/promise');
+const url = require('url');
+const bcrypt = require('bcryptjs');
+const bodyParser = require('body-parser');
+const cors = require('cors'); // Ensure this is only imported once
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const axios = require('axios');
+require('dotenv').config();
+
+const app = express();
+
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+// Proxy setup for routes starting with '/api' to forward to a target server
+app.use(
+  '/api', // Route prefix for which the proxy should apply
+  createProxyMiddleware({
+    target: 'https://guardian-angel-backend-5884babad37c.herokuapp.com', // Target server
+    changeOrigin: true, // Needed for virtual hosted sites
+    pathRewrite: { '^/api': '' }, // Remove '/api' from the proxied request
+    headers: {
+      'Access-Control-Allow-Origin': 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com',
+    },
+  })
+);
+
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
   host: new URL(dbUrl).hostname,
