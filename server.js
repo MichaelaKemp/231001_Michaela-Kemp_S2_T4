@@ -65,24 +65,32 @@ app.post('/api/register', async (req, res) => {
 
 // Login User
 app.post('/api/login', async (req, res) => {
-  console.log('Request Body:', req.body); // Add this line to log the request body
   const { email, password } = req.body;
+  console.log('Login request received with:', { email, password });
 
   try {
     const [results] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+    console.log('Database query results:', results);
+
     if (results.length === 0) {
+      console.error('User not found');
       return res.status(401).send({ error: 'User not found!' });
     }
+
     const user = results[0];
     const passwordMatch = bcrypt.compareSync(password, user.password);
+    console.log('Password match status:', passwordMatch);
 
     if (passwordMatch) {
       const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      console.log('Token generated:', token);
       res.status(200).send({ message: 'Login successful!', token, userId: user.id });
     } else {
+      console.error('Invalid password');
       res.status(401).send({ error: 'Invalid password!' });
     }
   } catch (error) {
+    console.error('Error during login:', error);
     res.status(500).send({ error: error.message });
   }
 });
