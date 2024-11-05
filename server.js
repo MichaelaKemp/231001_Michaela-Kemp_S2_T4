@@ -12,14 +12,23 @@ require('dotenv').config();
 
 const app = express();
 
-app.use(cors(corsOptions)); // Apply the CORS middleware with specified options
-app.options('*', cors(corsOptions)); // Enable preflight across all routes
-
-// Configure CORS with options
 const corsOptions = {
   origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com',
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true,
+  allowedHeaders: "Origin, X-Requested-With, Content-Type, Accept, Authorization"
 };
+
+app.options('*', (req, res) => {
+  res.header("Access-Control-Allow-Origin", "https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com");
+  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.sendStatus(200);
+});
+
+app.use(cors(corsOptions)); // Apply the CORS middleware with specified options
+app.options('*', cors(corsOptions)); // Enable preflight across all routes
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
