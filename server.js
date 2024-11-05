@@ -117,7 +117,7 @@ app.post('/api/request', authenticateToken, (req, res) => {
 });
 
 // Get user profile (protected route)
-app.get('/user/profile', authenticateToken, (req, res) => {
+app.get('/api/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
