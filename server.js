@@ -5,7 +5,6 @@ const bcrypt = require('bcryptjs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const multer = require('multer');
 const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
@@ -27,9 +26,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
-
-
-
 
 // Ensure this is placed right after CORS and before any routes
 app.use(express.json());
@@ -75,10 +71,6 @@ db.query('SELECT 1')
     console.error('Database connection error:', error);
     process.exit(1); // Exit if there is a connection error
   });
-
-// Configure multer for file storage
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
 
 // Register User
 app.post('/register', async (req, res) => {
@@ -152,7 +144,7 @@ app.get('/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
   console.log('Fetching profile for user ID:', userId);
 
-  const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
+  const query = 'SELECT id, name, surname, email, bio FROM users WHERE id = ?';
   db.query(query, [userId], (err, results) => {
     if (err) {
       console.error('Error querying database:', err);
@@ -167,26 +159,12 @@ app.get('/user/profile', authenticateToken, (req, res) => {
 });
 
 // Update user profile (protected route)
-app.post('/user/profile/update', upload.single('image'), (req, res) => {
+app.post('/user/profile/update', (req, res) => {
   const userId = req.user.id;
   const { name, surname, email, bio } = req.body;
-  if (!email) {
-    return res.status(400).send({ error: 'Email cannot be empty' });
-  }
 
-  // If there's an uploaded file, get its buffer
-  const profileImage = req.file ? req.file.buffer : null;
-
-  let query = `UPDATE users SET name = ?, surname = ?, email = ?, bio = ?`;
-  const values = [name, surname, email, bio];
-
-  if (profileImage) {
-    query += `, profile_image = ?`;
-    values.push(profileImage);
-  }
-
-  query +=  `WHERE id = ?`;
-  values.push(userId);
+  let query = `UPDATE users SET name = ?, surname = ?, email = ?, bio = ? WHERE id = ?`;
+  const values = [name, surname, email, bio, userId];
 
   db.query(query, values, (err, result) => {
     if (err) {
@@ -194,10 +172,7 @@ app.post('/user/profile/update', upload.single('image'), (req, res) => {
       return res.status(500).send({ error: 'Failed to update profile' });
     }
 
-    res.status(200).send({
-      message: 'Profile updated successfully',
-      profile_image: profileImage ? 'Binary data stored' : null,
-    });
+    res.status(200).send({ message: 'Profile updated successfully' });
   });
 });
 
@@ -223,7 +198,7 @@ app.post('/user/request/update', (req, res) => {
 app.get('/all-open-requests', (req, res) => {
   const fetchRequestsQuery = 
     `SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
-           r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
+           r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname
     FROM requests r
     JOIN users u ON r.user_id = u.id
     WHERE r.request_status = 'open'
@@ -235,16 +210,7 @@ app.get('/all-open-requests', (req, res) => {
       return res.status(500).send({ error: 'Error fetching requests' });
     }
 
-    // Convert each profile_image to Base64
-    const requestsWithBase64Images = requests.map(request => {
-      if (request.profile_image) {
-        request.profile_image = request.profile_image.toString('base64');
-        request.image_type = 'jpeg'; // Set this based on actual format (e.g., 'jpeg' or 'png')
-      }    
-      return request;
-    });  
-
-    res.status(200).json(requestsWithBase64Images);
+    res.status(200).json(requests); // Directly send requests without modifying them
   });
 });
 
@@ -266,7 +232,7 @@ app.get('/user/requests', (req, res) => {
 
     const fetchAcceptedUsersPromises = requests.map(request => {
       const acceptedUsersQuery = 
-        `SELECT u.id, u.name, u.surname, u.profile_image
+        `SELECT u.id, u.name, u.surname
         FROM accepted_requests ar
         JOIN users u ON ar.user_id = u.id
         WHERE ar.request_id = ?`
@@ -505,21 +471,14 @@ app.post('/requests/:id/respond', (req, res) => {
 app.get('/user/:userId', (req, res) => {
   const userId = req.params.userId;
 
-  const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
+  const query = 'SELECT id, name, surname, email, bio FROM users WHERE id = ?';
   db.query(query, [userId], (err, results) => {
     if (err) {
       return res.status(500).send({ error: 'Error fetching user profile' });
     } else if (results.length === 0) {
       return res.status(404).send({ error: 'User not found' });
     } else {
-      const user = results[0];
-
-      // Convert profile_image to Base64 if it exists
-      if (user.profile_image) {
-        user.profile_image = user.profile_image.toString('base64');
-      }
-
-      res.status(200).json(user);
+      res.status(200).json(results[0]); // Directly send the user details
     }
   });
 });
