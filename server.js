@@ -152,7 +152,7 @@ app.get('/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
   console.log('Fetching profile for user ID:', userId);
 
-  const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
+  const query = 'SELECT id, name, surname, email, bio FROM users WHERE id = ?';
   db.query(query, [userId], (err, results) => {
     if (err) {
       console.error('Error querying database:', err);
