@@ -14,14 +14,22 @@ const cors = require('cors');
 
 // Define CORS options with the exact frontend URL
 const corsOptions = {
-  origin: "https://guardian-angel-frontend-za-b3b88c77cacc.herokuapp.com", // Replace this with your exact frontend origin URL
+  origin: '*', // Temporarily allow all origins
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
 };
 
 // Initialize express app
 const app = express();
-app.use(cors(corsOptions)); // Apply CORS middleware with defined options
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable preflight across all routes
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://guardian-angel-frontend-za-b3b88c77cacc.herokuapp.com");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
+  next();
+});
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
