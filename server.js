@@ -10,11 +10,6 @@ const axios = require('axios');
 require('dotenv').config();
 const dbUrl = process.env.JAWSDB_URL || process.env.DATABASE_URL;
 
-const app = express();
-app.use(cors());
-app.use(bodyParser.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // Database connection
 const db = mysql.createConnection(dbUrl);
 
