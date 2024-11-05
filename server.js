@@ -128,13 +128,7 @@ app.get('/api/user/profile', authenticateToken, (req, res) => {
       res.status(404).send({ error: 'User not found' });
     } else {
       const user = results[0];
-
-      // Convert image to base64 if it exists
-      if (user.profile_image) {
-        user.profile_image = user.profile_image.toString('base64');
-      }
-
-      res.status(200).json(user);
+      res.status(200).json(user); // This response should include `name`
     }
   });
 });
