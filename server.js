@@ -1,31 +1,26 @@
 const express = require('express');
-const mysql = require('mysql2/promise'); // Use mysql2 instead of mysql
+const mysql = require('mysql2/promise');
 const url = require('url');
 const bcrypt = require('bcryptjs');
 const bodyParser = require('body-parser');
-const cors = require('cors');
+const cors = require('cors'); // Ensure this is only imported once
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 
-app.use(cors({
-  origin: 'https://guardian-angel-frontend-za-b3b88c77cacc.herokuapp.com',
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-  credentials: true,
-}));
-app.options('*', cors()); // Enable preflight across all routes
-
-// Initialize express app
 const app = express();
 
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://guardian-angel-frontend-za-b3b88c77cacc.herokuapp.com");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
-  next();
-});
+// Configure CORS with options
+const corsOptions = {
+  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com', // Use exact frontend URL
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true,
+};
+
+app.use(cors(corsOptions)); // Apply the CORS middleware with specified options
+app.options('*', cors(corsOptions)); // Enable preflight across all routes
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
