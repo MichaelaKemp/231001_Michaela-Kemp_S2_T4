@@ -47,7 +47,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // Register User
-app.post('/register', async (req, res) => {
+app.post('api/register', async (req, res) => {
   const { name, surname, email, password } = req.body;
   const hashedPassword = bcrypt.hashSync(password, 10);
 
@@ -60,7 +60,7 @@ app.post('/register', async (req, res) => {
 });
 
 // Login User
-app.post('/login', async (req, res) => {
+app.post('api/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -83,7 +83,7 @@ app.post('/login', async (req, res) => {
 });
 
 // Create a new request (protected route)
-app.post('/request', authenticateToken, (req, res) => {
+app.post('api/request', authenticateToken, (req, res) => {
   const { start_location, end_location, meeting_time, request_type } = req.body;
   const userId = req.user.id;
 
