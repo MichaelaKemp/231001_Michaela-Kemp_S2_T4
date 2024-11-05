@@ -11,8 +11,16 @@ const axios = require('axios');
 require('dotenv').config();
 const app = express();
 
+const allowedOrigins = ['https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com'];
+
 app.use(cors({
-  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -20,6 +28,19 @@ app.use(cors({
 
 // Ensure this is placed right after CORS and before any routes
 app.use(express.json());
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token == null) return res.sendStatus(401);
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    console.log('Decoded user from token:', user); // Add this line
+    req.user = user;
+    next();
+  });  
+}
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 
