@@ -9,43 +9,14 @@ const multer = require('multer');
 const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
-
 const app = express();
-const { createProxyMiddleware } = require('http-proxy-middleware');
 
-// Set up global CORS
 app.use(cors({
-  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com',
+  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com', // Replace with your frontend URL
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: true, // Enable cookies/sessions if needed
 }));
-
-// Proxy setup for routes starting with '/api' to forward to the target server
-app.use(
-  '/api',
-  createProxyMiddleware({
-    target: 'https://guardian-angel-backend-5884babad37c.herokuapp.com', // Target backend server
-    changeOrigin: true, // Needed for virtual hosted sites
-    pathRewrite: { '^/api': '' }, // Remove '/api' prefix when forwarding
-    onProxyRes: function (proxyRes, req, res) {
-      // Add CORS headers to proxied response
-      proxyRes.headers['Access-Control-Allow-Origin'] = 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com';
-      proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
-      proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
-      proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-    },
-  })
-);
-
-// Handle preflight OPTIONS requests
-app.options('/api/*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
