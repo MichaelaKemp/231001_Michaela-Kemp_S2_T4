@@ -13,7 +13,8 @@ const app = express();
 
 const allowedOrigins = ['https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com'];
 
-app.use(cors({
+// Add CORS middleware to handle all OPTIONS requests
+app.options('*', cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -25,6 +26,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
+
 
 // Ensure this is placed right after CORS and before any routes
 app.use(express.json());
