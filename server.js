@@ -11,36 +11,29 @@ const axios = require('axios');
 require('dotenv').config();
 const app = express();
 
-// CORS configuration to allow requests from your frontend app
 app.use(cors({
-  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com', // Frontend URL
+  origin: process.env.FRONTEND_URL, 
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true, // Use this if you need to allow cookies or authentication headers
+  credentials: true,
 }));
-
-// Middleware to parse JSON bodies
 app.use(express.json());
 
-const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
+const dbUrl = new URL(process.env.DATABASE_URL || process.env.JAWSDB_URL);
 const dbOptions = {
-  host: new URL(dbUrl).hostname,
-  user: new URL(dbUrl).username,
-  password: new URL(dbUrl).password,
-  database: new URL(dbUrl).pathname.slice(1),
+  host: dbUrl.hostname,
+  user: dbUrl.username,
+  password: dbUrl.password,
+  database: dbUrl.pathname.slice(1),
 };
-
 const db = mysql.createPool(dbOptions);
 
-// JWT authentication middleware
 const authenticateToken = (req, res, next) => {
-  const token = req.headers['authorization'];
-  if (!token) return res.status(401).send({ error: 'Access denied. No token provided.' });
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token provided' });
 
-  const actualToken = token.split(' ')[1];
-
-  jwt.verify(actualToken, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).send({ error: 'Invalid token.' });
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
     req.user = user;
     next();
   });
@@ -53,68 +46,53 @@ const upload = multer({ storage: storage });
 // Register User
 app.post('/api/register', async (req, res) => {
   const { name, surname, email, password } = req.body;
-  const hashedPassword = bcrypt.hashSync(password, 10);
-
   try {
-    await db.query('INSERT INTO users (name, surname, email, password) VALUES (?, ?, ?, ?)', [name, surname, email, hashedPassword]);
-    res.status(200).send({ message: 'User registered successfully!' });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.query(
+      'INSERT INTO users (name, surname, email, password) VALUES (?, ?, ?, ?)', 
+      [name, surname, email, hashedPassword]
+    );
+    res.status(200).json({ message: 'User registered successfully' });
   } catch (error) {
-    res.status(500).send({ error: error.message });
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Failed to register user' });
   }
 });
 
 // Login User
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
-  console.log('Login request received with:', { email, password });
-
   try {
     const [results] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-    console.log('Database query results:', results);
-
-    if (results.length === 0) {
-      console.error('User not found');
-      return res.status(401).send({ error: 'User not found!' });
-    }
+    if (results.length === 0) return res.status(401).json({ error: 'User not found' });
 
     const user = results[0];
-    const passwordMatch = bcrypt.compareSync(password, user.password);
-    console.log('Password match status:', passwordMatch);
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) return res.status(401).json({ error: 'Invalid password' });
 
-    if (passwordMatch) {
-      const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-      console.log('Token generated:', token);
-      res.status(200).send({ message: 'Login successful!', token, userId: user.id });
-    } else {
-      console.error('Invalid password');
-      res.status(401).send({ error: 'Invalid password!' });
-    }
+    const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.status(200).json({ message: 'Login successful', token, userId: user.id });
   } catch (error) {
-    console.error('Error during login:', error);
-    res.status(500).send({ error: error.message });
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
 // Create a new request (protected route)
-app.post('/api/request', authenticateToken, (req, res) => {
+app.post('/api/request', authenticateToken, async (req, res) => {
   const { start_location, end_location, meeting_time, request_type } = req.body;
   const userId = req.user.id;
-
-  console.log("Request Data:", { start_location, end_location, meeting_time, request_type, userId });
-
-  const query = `
-    INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type, request_status)
-    VALUES (?, ?, ?, ?, ?, 'open')
-  `;
-
-  db.query(query, [userId, start_location, end_location, meeting_time, request_type], (err, result) => {
-    if (err) {
-      console.error('Error saving request to database:', err);
-      res.status(500).send({ error: 'Failed to create request' });
-    } else {
-      res.status(200).send({ message: 'Request created successfully!' });
-    }
-  });
+  try {
+    await db.query(
+      `INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type, request_status) 
+      VALUES (?, ?, ?, ?, ?, 'open')`, 
+      [userId, start_location, end_location, meeting_time, request_type]
+    );
+    res.status(200).json({ message: 'Request created successfully' });
+  } catch (error) {
+    console.error('Create request error:', error);
+    res.status(500).json({ error: 'Failed to create request' });
+  }
 });
 
 // Get user profile (protected route)
@@ -194,32 +172,29 @@ app.post('/user/request/update', authenticateToken, (req, res) => {
 });
 
 // Fetch all open requests along with the user's details
-app.get('/all-open-requests', authenticateToken, (req, res) => {
-  const fetchRequestsQuery = `
-    SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
-           r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
-    FROM requests r
-    JOIN users u ON r.user_id = u.id
-    WHERE r.request_status = 'open'
-    ORDER BY r.meeting_time DESC
-  `;
+app.get('/all-open-requests', authenticateToken, async (req, res) => {
+  try {
+    const [requests] = await db.query(`
+      SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
+             r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
+      FROM requests r
+      JOIN users u ON r.user_id = u.id
+      WHERE r.request_status = 'open'
+      ORDER BY r.meeting_time DESC
+    `);
 
-  db.query(fetchRequestsQuery, (err, requests) => {
-    if (err) {
-      return res.status(500).send({ error: 'Error fetching requests' });
-    }
-
-    // Convert each profile_image to Base64
     const requestsWithBase64Images = requests.map(request => {
       if (request.profile_image) {
         request.profile_image = request.profile_image.toString('base64');
-        request.image_type = 'jpeg'; // Set this based on actual format (e.g., 'jpeg' or 'png')
-      }    
+      }
       return request;
-    });  
+    });
 
     res.status(200).json(requestsWithBase64Images);
-  });
+  } catch (error) {
+    console.error('Fetch requests error:', error);
+    res.status(500).json({ error: 'Failed to fetch open requests' });
+  }
 });
 
 // Fetch all requests and accepted users
@@ -509,13 +484,13 @@ app.get('/proxy-distance', async (req, res) => {
       params: {
         origins,
         destinations,
-        key: process.env.GOOGLE_MAPS_API_KEY, // Store your key in .env for security
-      }
+        key: process.env.GOOGLE_MAPS_API_KEY,
+      },
     });
     res.json(response.data);
   } catch (error) {
-    console.error("Error in proxy distance request:", error);
-    res.status(500).send("Error fetching distance from Google API");
+    console.error('Distance matrix proxy error:', error);
+    res.status(500).json({ error: 'Failed to fetch distance from Google API' });
   }
 });
 
