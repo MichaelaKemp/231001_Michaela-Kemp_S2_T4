@@ -10,19 +10,15 @@ const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 
-const cors = require('cors');
-
-// Define CORS options with the exact frontend URL
-const corsOptions = {
-  origin: '*', // Temporarily allow all origins
+app.use(cors({
+  origin: 'https://guardian-angel-frontend-za-b3b88c77cacc.herokuapp.com',
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
-};
+}));
+app.options('*', cors()); // Enable preflight across all routes
 
 // Initialize express app
 const app = express();
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable preflight across all routes
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "https://guardian-angel-frontend-za-b3b88c77cacc.herokuapp.com");
@@ -39,7 +35,7 @@ const dbOptions = {
   database: new URL(dbUrl).pathname.slice(1),
 };
 
-const db = mysql.createConnection(dbOptions);
+const db = mysql.createPool(dbOptions);
 
 // JWT authentication middleware
 const authenticateToken = (req, res, next) => {
@@ -60,48 +56,39 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // Register User
-app.post('/register', (req, res) => {
+app.post('/register', async (req, res) => {
   const { name, surname, email, password } = req.body;
   const hashedPassword = bcrypt.hashSync(password, 10);
 
-  const query = 'INSERT INTO users (name, surname, email, password) VALUES (?, ?, ?, ?)';
-  db.query(query, [name, surname, email, hashedPassword], (err, result) => {
-    if (err) {
-      res.status(500).send({ error: err.message });
-    } else {
-      res.status(200).send({ message: 'User registered successfully!' });
-    }
-  });
+  try {
+    await db.query('INSERT INTO users (name, surname, email, password) VALUES (?, ?, ?, ?)', [name, surname, email, hashedPassword]);
+    res.status(200).send({ message: 'User registered successfully!' });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
 });
 
 // Login User
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
-  const query = 'SELECT * FROM users WHERE email = ?';
-  db.query(query, [email], (err, results) => {
-    if (err) {
-      res.status(500).send({ error: err.message });
-    } else if (results.length === 0) {
-      res.status(401).send({ error: 'User not found!' });
-    } else {
-      const user = results[0];
-      const passwordMatch = bcrypt.compareSync(password, user.password);
-
-      if (passwordMatch) {
-        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        
-        // Send back userId along with the token
-        res.status(200).send({ 
-          message: 'Login successful!', 
-          token,
-          userId: user.id  // <-- Add userId here
-        });
-      } else {
-        res.status(401).send({ error: 'Invalid password!' });
-      }
+  try {
+    const [results] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+    if (results.length === 0) {
+      return res.status(401).send({ error: 'User not found!' });
     }
-  });
+    const user = results[0];
+    const passwordMatch = bcrypt.compareSync(password, user.password);
+
+    if (passwordMatch) {
+      const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      res.status(200).send({ message: 'Login successful!', token, userId: user.id });
+    } else {
+      res.status(401).send({ error: 'Invalid password!' });
+    }
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
 });
 
 // Create a new request (protected route)
@@ -601,14 +588,14 @@ app.get('/analytics/:userId', authenticateToken, async (req, res) => {
   const { userId } = req.params;
 
   try {
-    // Trip Count: Closed (Completed) Trips
     const completedTripsQuery = `
       SELECT id, start_location, end_location, DATE(created_at) AS travelDate
       FROM requests
       WHERE user_id = ? AND request_status = 'closed';
     `;
+    const [completedTripsResults] = await db.query(completedTripsQuery, [userId]);
 
-    // Trips Accepted by both creator and user
+    // Additional queries
     const tripsAcceptedQuery = `
       SELECT COUNT(*) AS tripsAccepted
       FROM accepted_requests
@@ -616,110 +603,29 @@ app.get('/analytics/:userId', authenticateToken, async (req, res) => {
         AND status = 'accepted' 
         AND creator_status = 'accepted';
     `;
+    const [tripsAcceptedResults] = await db.query(tripsAcceptedQuery, [userId]);
 
-    // Cancellation Rate
     const totalRequestsQuery = `SELECT COUNT(*) AS totalRequests FROM requests WHERE user_id = ?;`;
     const canceledRequestsQuery = `SELECT COUNT(*) AS canceledRequests FROM requests WHERE user_id = ? AND request_status = 'canceled';`;
 
-    // Peak Hours of Request Creation
-    const peakHoursQuery = `
-      SELECT HOUR(created_at) AS hour, COUNT(*) AS requestCount
-      FROM requests
-      WHERE user_id = ?
-      GROUP BY HOUR(created_at)
-      ORDER BY requestCount DESC
-      LIMIT 3;
-    `;
+    const [totalRequestsResults] = await db.query(totalRequestsQuery, [userId]);
+    const [canceledRequestsResults] = await db.query(canceledRequestsQuery, [userId]);
 
-    // Preferred Request Types
-    const preferredRequestTypesQuery = `
-      SELECT request_type, COUNT(*) AS count
-      FROM requests
-      WHERE user_id = ?
-      GROUP BY request_type
-      ORDER BY count DESC;
-    `;
-
-    // Execute queries for static data
-    const [completedTripsResults] = await db.promise().query(completedTripsQuery, [userId]);
-    const [tripsAcceptedResults] = await db.promise().query(tripsAcceptedQuery, [userId]);
-    const [totalRequestsResults] = await db.promise().query(totalRequestsQuery, [userId]);
-    const [canceledRequestsResults] = await db.promise().query(canceledRequestsQuery, [userId]);
-    const [peakHoursResults] = await db.promise().query(peakHoursQuery, [userId]);
-    const [preferredRequestTypesResults] = await db.promise().query(preferredRequestTypesQuery, [userId]);
-
-    // Process data with defaults if results are missing
     const completedTrips = completedTripsResults.length;
     const tripsAccepted = tripsAcceptedResults[0]?.tripsAccepted || 0;
     const totalRequests = totalRequestsResults[0]?.totalRequests || 0;
     const canceledRequests = canceledRequestsResults[0]?.canceledRequests || 0;
     const cancellationRate = totalRequests > 0 ? (canceledRequests / totalRequests) * 100 : 0;
-    const peakHours = peakHoursResults || [];
-    const preferredRequestTypes = preferredRequestTypesResults || [];
 
-    // Calculate distances using Google Maps API
-    const distanceByDate = {};
-    for (const trip of completedTripsResults) {
-      const { id, start_location, end_location, travelDate } = trip;
-
-      // Call Google Maps Distance Matrix API
-      try {
-        const response = await axios.get('https://maps.googleapis.com/maps/api/distancematrix/json', {
-          params: {
-            origins: start_location,
-            destinations: end_location,
-            key: process.env.GOOGLE_MAPS_API_KEY,
-          },
-        });
-
-        // Check if the response contains the necessary distance information
-        const distanceElement = response.data.rows?.[0]?.elements?.[0];
-        if (distanceElement && distanceElement.status === "OK" && distanceElement.distance) {
-          const distance = distanceElement.distance.value / 1000; // Convert meters to kilometers
-
-          // Aggregate distance by date
-          if (distanceByDate[travelDate]) {
-            distanceByDate[travelDate] += distance;
-          } else {
-            distanceByDate[travelDate] = distance;
-          }
-        } else {
-          console.warn(`Warning: Distance information missing for request ${id}`);
-        }
-      } catch (error) {
-        console.error(`Error fetching distance for request ${id}:`, error);
-      }
-    }
-
-    // Convert distanceByDate to an array format
-    const distanceByDateArray = Object.entries(distanceByDate).map(([date, totalDistance]) => ({
-      travelDate: date,
-      totalDistance,
-    }));
-
-    // Send back the analytics data
     res.status(200).json({
       completedTrips,
       tripsAccepted,
-      distanceByDate: distanceByDateArray,
       cancellationRate,
-      peakHours,
-      preferredRequestTypes,
     });
   } catch (error) {
-    console.error('Error fetching analytics:', error);
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }
 });
-
-if (process.env.NODE_ENV === 'production') {
-  const path = require('path');
-  app.use(express.static(path.join(__dirname, 'frontend/build')));
-
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'frontend/build', 'index.html'));
-  });
-}
 
 // Start the server
 const PORT = process.env.PORT || 5000;
