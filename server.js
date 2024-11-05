@@ -134,7 +134,7 @@ app.get('/api/user/profile', authenticateToken, (req, res) => {
 });
 
 // Update user profile (protected route)
-app.post('/user/profile/update', authenticateToken, upload.single('image'), (req, res) => {
+app.post('/api/user/profile/update', authenticateToken, upload.single('image'), (req, res) => {
   const userId = req.user.id;
   const { name, surname, email, bio } = req.body;
   if (!email) {
@@ -168,7 +168,7 @@ app.post('/user/profile/update', authenticateToken, upload.single('image'), (req
   });
 });
 
-app.post('/user/request/update', authenticateToken, (req, res) => {
+app.post('/api/user/request/update', authenticateToken, (req, res) => {
   const { request_id, start_location, end_location, meeting_time, request_type } = req.body;
 
   const query = 
@@ -187,7 +187,7 @@ app.post('/user/request/update', authenticateToken, (req, res) => {
 });
 
 // Fetch all open requests along with the user's details
-app.get('/all-open-requests', authenticateToken, (req, res) => {
+app.get('/api/all-open-requests', authenticateToken, (req, res) => {
   const fetchRequestsQuery = 
     `SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
            r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
@@ -216,7 +216,7 @@ app.get('/all-open-requests', authenticateToken, (req, res) => {
 });
 
 // Fetch all requests and accepted users
-app.get('/user/requests', authenticateToken, (req, res) => {
+app.get('/api/user/requests', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   const fetchRequestsQuery = 
@@ -261,7 +261,7 @@ app.get('/user/requests', authenticateToken, (req, res) => {
 });
 
 // Reopen a closed request (protected route)
-app.post('/user/request/reopen', authenticateToken, (req, res) => {
+app.post('/api/user/request/reopen', authenticateToken, (req, res) => {
   const userId = req.user.id;
   const { id, start_location, end_location, meeting_time, request_type } = req.body;
 
@@ -283,7 +283,7 @@ app.post('/user/request/reopen', authenticateToken, (req, res) => {
 });
 
 // Edit a request (protected route)
-app.put('/requests/:id', authenticateToken, (req, res) => {
+app.put('/api/requests/:id', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
   const { start_location, end_location, meeting_time, request_type, request_status } = req.body;
@@ -329,7 +329,7 @@ app.put('/requests/:id', authenticateToken, (req, res) => {
 });
 
 // Delete a request (protected route)
-app.delete('/requests/:id', authenticateToken, (req, res) => {
+app.delete('/api/requests/:id', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -364,7 +364,7 @@ app.delete('/requests/:id', authenticateToken, (req, res) => {
 });
 
 // Cancel a request (protected route)
-app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
+app.post('/api/requests/:id/cancel', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -382,7 +382,7 @@ app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
 });
 
 // Accept a request (protected route)
-app.post('/requests/:id/accept', authenticateToken, (req, res) => {
+app.post('/api/requests/:id/accept', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -434,7 +434,7 @@ app.post('/requests/:id/accept', authenticateToken, (req, res) => {
   });
 });
 
-app.post('/requests/:id/respond', authenticateToken, (req, res) => {
+app.post('/api/requests/:id/respond', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.body.userId; // ID of the user being responded to
   const { action } = req.body; // "accept" or "decline"
@@ -469,7 +469,7 @@ app.post('/requests/:id/respond', authenticateToken, (req, res) => {
 });
 
 // Get user profile by ID (protected route)
-app.get('/user/:userId', authenticateToken, (req, res) => {
+app.get('/api/user/:userId', authenticateToken, (req, res) => {
   const userId = req.params.userId;
 
   const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
@@ -491,7 +491,7 @@ app.get('/user/:userId', authenticateToken, (req, res) => {
   });
 });
 
-app.get('/proxy-distance', async (req, res) => {
+app.get('/api/proxy-distance', async (req, res) => {
   const { origins, destinations } = req.query;
   try {
     const response = await axios.get(`https://maps.googleapis.com/maps/api/distancematrix/json`, {
@@ -509,7 +509,7 @@ app.get('/proxy-distance', async (req, res) => {
 });
 
 // Endpoint to like a user's profile
-app.post('/user/:userId/like', authenticateToken, async (req, res) => {
+app.post('/api/user/:userId/like', authenticateToken, async (req, res) => {
   const { userId } = req.params;
   const likedBy = req.user.id;
 
@@ -525,7 +525,7 @@ app.post('/user/:userId/like', authenticateToken, async (req, res) => {
 });
 
 // Endpoint to add a comment to a user's profile
-app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
+app.post('/api/user/:userId/comment', authenticateToken, async (req, res) => {
   const { userId } = req.params;
   const commentedBy = req.user.id;
   const { comment } = req.body;
@@ -542,7 +542,7 @@ app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
 });
 
 // Endpoint to get the like count for a user's profile
-app.get('/user/:userId/likes', authenticateToken, (req, res) => {
+app.get('/api/user/:userId/likes', authenticateToken, (req, res) => {
   const { userId } = req.params;
 
   const query = `SELECT COUNT(*) AS likesCount FROM likes WHERE user_id = ?`;
@@ -557,7 +557,7 @@ app.get('/user/:userId/likes', authenticateToken, (req, res) => {
 });
 
 // Endpoint to get comments for a user's profile
-app.get('/user/:userId/comments', authenticateToken, (req, res) => {
+app.get('/api/user/:userId/comments', authenticateToken, (req, res) => {
   const { userId } = req.params;
 
   const query = 
@@ -577,7 +577,7 @@ app.get('/user/:userId/comments', authenticateToken, (req, res) => {
   });
 });
 
-app.get('/analytics/:userId', authenticateToken, async (req, res) => {
+app.get('/api/analytics/:userId', authenticateToken, async (req, res) => {
   const { userId } = req.params;
 
   try {
