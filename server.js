@@ -11,12 +11,16 @@ const axios = require('axios');
 require('dotenv').config();
 const app = express();
 
+// CORS configuration to allow requests from your frontend app
 app.use(cors({
-  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com', // Replace with your frontend URL
+  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com', // Frontend URL
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true, // Enable cookies/sessions if needed
+  credentials: true, // Use this if you need to allow cookies or authentication headers
 }));
+
+// Middleware to parse JSON bodies
+app.use(express.json());
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
