@@ -11,7 +11,7 @@ const axios = require('axios');
 require('dotenv').config();
 const app = express();
 
-const allowedOrigins = ['https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com'];
+const allowedOrigins = ['*'];
 
 // Add CORS middleware to handle all OPTIONS requests
 app.options('*', cors({
@@ -29,7 +29,7 @@ app.options('*', cors({
 
 // Middleware to set headers for all responses
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com');
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
