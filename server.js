@@ -14,9 +14,10 @@ const app = express();
 
 // Configure CORS with options
 const corsOptions = {
-  origin: 'https://guardian-angel-frontend-za-b38b8c77cacc.herokuapp.com', // Use exact frontend URL
+  origin: '*',
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
+  allowedHeaders: "Origin, X-Requested-With, Content-Type, Accept, Authorization"
 };
 
 app.use(cors(corsOptions)); // Apply the CORS middleware with specified options
