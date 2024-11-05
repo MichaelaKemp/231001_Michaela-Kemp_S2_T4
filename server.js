@@ -22,12 +22,24 @@ app.use(cors({
 app.use(express.json());
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
+
+if (!dbUrl) {
+  console.error("Database URL is not set.");
+  process.exit(1);
+}
+
 const dbOptions = {
   host: new URL(dbUrl).hostname,
   user: new URL(dbUrl).username,
   password: new URL(dbUrl).password,
-  database: new URL(dbUrl).pathname.slice(1),
+  database: new URL(dbUrl).pathname.slice(1), // removes the leading "/"
+  port: new URL(dbUrl).port || 3306, // explicitly specify port if needed
 };
+
+console.log('Database connection options:', {
+  ...dbOptions,
+  password: '********' // Masking the password in logs for security
+});
 
 const db = mysql.createPool(dbOptions);
 
@@ -154,7 +166,7 @@ app.post('/user/profile/update', upload.single('image'), (req, res) => {
   });
 });
 
-app.post('/user/request/update', authenticateToken, (req, res) => {
+app.post('/user/request/update', (req, res) => {
   const { request_id, start_location, end_location, meeting_time, request_type } = req.body;
 
   const query = 
@@ -173,7 +185,7 @@ app.post('/user/request/update', authenticateToken, (req, res) => {
 });
 
 // Fetch all open requests along with the user's details
-app.get('/all-open-requests', authenticateToken, (req, res) => {
+app.get('/all-open-requests', (req, res) => {
   const fetchRequestsQuery = 
     `SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
            r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname, u.profile_image
@@ -202,7 +214,7 @@ app.get('/all-open-requests', authenticateToken, (req, res) => {
 });
 
 // Fetch all requests and accepted users
-app.get('/user/requests', authenticateToken, (req, res) => {
+app.get('/user/requests', (req, res) => {
   const userId = req.user.id;
 
   const fetchRequestsQuery = 
@@ -247,7 +259,7 @@ app.get('/user/requests', authenticateToken, (req, res) => {
 });
 
 // Reopen a closed request (protected route)
-app.post('/user/request/reopen', authenticateToken, (req, res) => {
+app.post('/user/request/reopen', (req, res) => {
   const userId = req.user.id;
   const { id, start_location, end_location, meeting_time, request_type } = req.body;
 
@@ -269,7 +281,7 @@ app.post('/user/request/reopen', authenticateToken, (req, res) => {
 });
 
 // Edit a request (protected route)
-app.put('/requests/:id', authenticateToken, (req, res) => {
+app.put('/requests/:id', (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
   const { start_location, end_location, meeting_time, request_type, request_status } = req.body;
@@ -315,7 +327,7 @@ app.put('/requests/:id', authenticateToken, (req, res) => {
 });
 
 // Delete a request (protected route)
-app.delete('/requests/:id', authenticateToken, (req, res) => {
+app.delete('/requests/:id', (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -350,7 +362,7 @@ app.delete('/requests/:id', authenticateToken, (req, res) => {
 });
 
 // Cancel a request (protected route)
-app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
+app.post('/requests/:id/cancel', (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -368,7 +380,7 @@ app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
 });
 
 // Accept a request (protected route)
-app.post('/requests/:id/accept', authenticateToken, (req, res) => {
+app.post('/requests/:id/accept', (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -420,7 +432,7 @@ app.post('/requests/:id/accept', authenticateToken, (req, res) => {
   });
 });
 
-app.post('/requests/:id/respond', authenticateToken, (req, res) => {
+app.post('/requests/:id/respond', (req, res) => {
   const requestId = req.params.id;
   const userId = req.body.userId; // ID of the user being responded to
   const { action } = req.body; // "accept" or "decline"
@@ -455,7 +467,7 @@ app.post('/requests/:id/respond', authenticateToken, (req, res) => {
 });
 
 // Get user profile by ID (protected route)
-app.get('/user/:userId', authenticateToken, (req, res) => {
+app.get('/user/:userId', (req, res) => {
   const userId = req.params.userId;
 
   const query = 'SELECT id, name, surname, email, bio, profile_image FROM users WHERE id = ?';
@@ -495,7 +507,7 @@ app.get('/proxy-distance', async (req, res) => {
 });
 
 // Endpoint to like a user's profile
-app.post('/user/:userId/like', authenticateToken, async (req, res) => {
+app.post('/user/:userId/like', async (req, res) => {
   const { userId } = req.params;
   const likedBy = req.user.id;
 
@@ -511,7 +523,7 @@ app.post('/user/:userId/like', authenticateToken, async (req, res) => {
 });
 
 // Endpoint to add a comment to a user's profile
-app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
+app.post('/user/:userId/comment', async (req, res) => {
   const { userId } = req.params;
   const commentedBy = req.user.id;
   const { comment } = req.body;
@@ -528,7 +540,7 @@ app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
 });
 
 // Endpoint to get the like count for a user's profile
-app.get('/user/:userId/likes', authenticateToken, (req, res) => {
+app.get('/user/:userId/likes', (req, res) => {
   const { userId } = req.params;
 
   const query = `SELECT COUNT(*) AS likesCount FROM likes WHERE user_id = ?`;
@@ -543,7 +555,7 @@ app.get('/user/:userId/likes', authenticateToken, (req, res) => {
 });
 
 // Endpoint to get comments for a user's profile
-app.get('/user/:userId/comments', authenticateToken, (req, res) => {
+app.get('/user/:userId/comments', (req, res) => {
   const { userId } = req.params;
 
   const query = 
@@ -563,7 +575,7 @@ app.get('/user/:userId/comments', authenticateToken, (req, res) => {
   });
 });
 
-app.get('/analytics/:userId', authenticateToken, async (req, res) => {
+app.get('/analytics/:userId', async (req, res) => {
   const { userId } = req.params;
 
   try {
