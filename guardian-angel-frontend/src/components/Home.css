@@ -1,17 +1,35 @@
-/* Header Styling */
+body {
+  overflow-x: hidden; /* Prevent horizontal scrolling */
+  max-width: 100vw; /* Limit width to viewport */
+}
+
+/* Container adjustments */
+.container,
+.main-content,
+.section {
+  max-width: 100%; /* Constrain width */
+  box-sizing: border-box; /* Include padding in width calculation */
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
 .home-header {
     background: linear-gradient(135deg, #FF69B4 0%, #FF1493 100%);
     color: white;
     padding-top: 4rem;
     padding-bottom: 4rem;
     text-align: center;
+    max-width: 100%; /* Ensure the header does not overflow */
+    padding: 2rem 1rem;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
   
   .logo-img {
-    width: 160px;
-    height: 160px;
-    margin-bottom: 1rem;
-  }
+    width: 200px; /* Adjust width as needed */
+    height: auto;
+    margin-bottom: 0.5rem;
+  }  
   
   .get-started-btn {
     background-color: white;
@@ -107,12 +125,14 @@
   
   /* Table Styling for Travel Requests */
 .table-container {
-    overflow-x: auto;
+    overflow-x: auto; /* Allows horizontal scroll on small screens */
+    max-width: 100%;
   }
   
   .request-table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 600px; /* Set a minimum width for larger tables */
   }
   
   .request-table th, .request-table td {
@@ -198,3 +218,88 @@
     height: 40px;
     margin-top: 0.5rem;
   }
+
+  @media (max-width: 768px) {
+    .home-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .home-header h2 {
+        font-size: 1.25rem;
+    }
+
+    .get-started-btn {
+        padding: 0.5rem 1.2rem;
+        font-size: 0.9rem;
+    }
+
+    .section h2 {
+        font-size: 1.5rem;
+    }
+
+    .card h3 {
+        font-size: 1.25rem;
+    }
+
+    .card p {
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Reduce padding on very small screens */
+    .home-header {
+        padding: 1rem;
+    }
+
+    .home-header h1 {
+        font-size: 1.25rem;
+    }
+
+    .home-header h2 {
+        font-size: 1rem;
+    }
+
+    .get-started-btn {
+        padding: 0.4rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .card-grid {
+        grid-template-columns: 1fr; /* Stack cards on small screens */
+    }
+
+    .section h2 {
+        font-size: 1.25rem;
+    }
+
+    .card h3 {
+        font-size: 1.1rem;
+    }
+
+    .card p {
+        font-size: 0.85rem;
+    }
+
+    .profile-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .profile-picture {
+        width: 80px;
+        height: 80px;
+    }
+
+    .footer-text {
+        font-size: 0.9rem;
+    }
+}
+
+/* Ensure table doesn’t overflow */
+.table-container {
+    overflow-x: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem;
+}

@@ -1,11 +1,12 @@
 const express = require('express');
-const mysql = require('mysql');
+const mysql = require('mysql2'); // Use mysql2 instead of mysql
 const bcrypt = require('bcryptjs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
+const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
@@ -44,15 +45,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Configure multer for file storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // Register User
@@ -86,10 +79,38 @@ app.post('/login', (req, res) => {
 
       if (passwordMatch) {
         const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.status(200).send({ message: 'Login successful!', token });
+        
+        // Send back userId along with the token
+        res.status(200).send({ 
+          message: 'Login successful!', 
+          token,
+          userId: user.id  // <-- Add userId here
+        });
       } else {
         res.status(401).send({ error: 'Invalid password!' });
       }
+    }
+  });
+});
+
+// Create a new request (protected route)
+app.post('/request', authenticateToken, (req, res) => {
+  const { start_location, end_location, meeting_time, request_type } = req.body;
+  const userId = req.user.id;
+
+  console.log("Request Data:", { start_location, end_location, meeting_time, request_type, userId });
+
+  const query = `
+    INSERT INTO requests (user_id, start_location, end_location, meeting_time, request_type, request_status)
+    VALUES (?, ?, ?, ?, ?, 'open')
+  `;
+
+  db.query(query, [userId, start_location, end_location, meeting_time, request_type], (err, result) => {
+    if (err) {
+      console.error('Error saving request to database:', err);
+      res.status(500).send({ error: 'Failed to create request' });
+    } else {
+      res.status(200).send({ message: 'Request created successfully!' });
     }
   });
 });
@@ -105,7 +126,14 @@ app.get('/user/profile', authenticateToken, (req, res) => {
     } else if (results.length === 0) {
       res.status(404).send({ error: 'User not found' });
     } else {
-      res.status(200).json(results[0]);
+      const user = results[0];
+
+      // Convert image to base64 if it exists
+      if (user.profile_image) {
+        user.profile_image = user.profile_image.toString('base64');
+      }
+
+      res.status(200).json(user);
     }
   });
 });
@@ -114,7 +142,12 @@ app.get('/user/profile', authenticateToken, (req, res) => {
 app.post('/user/profile/update', authenticateToken, upload.single('image'), (req, res) => {
   const userId = req.user.id;
   const { name, surname, email, bio } = req.body;
-  const profileImage = req.file ? req.file.filename : null;
+  if (!email) {
+    return res.status(400).send({ error: 'Email cannot be empty' });
+  }
+
+  // If there's an uploaded file, get its buffer
+  const profileImage = req.file ? req.file.buffer : null;
 
   let query = `UPDATE users SET name = ?, surname = ?, email = ?, bio = ?`;
   const values = [name, surname, email, bio];
@@ -135,7 +168,7 @@ app.post('/user/profile/update', authenticateToken, upload.single('image'), (req
 
     res.status(200).send({
       message: 'Profile updated successfully',
-      profile_image: profileImage,
+      profile_image: profileImage ? 'Binary data stored' : null,
     });
   });
 });
@@ -173,7 +206,17 @@ app.get('/all-open-requests', authenticateToken, (req, res) => {
     if (err) {
       return res.status(500).send({ error: 'Error fetching requests' });
     }
-    res.status(200).json(requests);
+
+    // Convert each profile_image to Base64
+    const requestsWithBase64Images = requests.map(request => {
+      if (request.profile_image) {
+        request.profile_image = request.profile_image.toString('base64');
+        request.image_type = 'jpeg'; // Set this based on actual format (e.g., 'jpeg' or 'png')
+      }    
+      return request;
+    });  
+
+    res.status(200).json(requestsWithBase64Images);
   });
 });
 
@@ -244,42 +287,193 @@ app.post('/user/request/reopen', authenticateToken, (req, res) => {
   });
 });
 
-// Accept a request
-app.post('/requests/:id/accept', authenticateToken, (req, res) => {
+// Edit a request (protected route)
+app.put('/requests/:id', authenticateToken, (req, res) => {
+  const requestId = req.params.id;
+  const userId = req.user.id;
+  const { start_location, end_location, meeting_time, request_type, request_status } = req.body;
+
+  // Determine the correct status based on the meeting time
+  const updatedStatus = new Date(meeting_time) > new Date() ? 'open' : request_status;
+
+  const updateRequestQuery = `
+    UPDATE requests
+    SET start_location = ?, end_location = ?, meeting_time = ?, request_type = ?, request_status = ?
+    WHERE id = ? AND user_id = ?
+  `;
+
+  db.query(updateRequestQuery, [start_location, end_location, meeting_time, request_type, updatedStatus, requestId, userId], (err, result) => {
+    if (err) {
+      console.error('Error updating the request:', err);
+      return res.status(500).json({ error: 'Failed to update the request.' });
+    } else if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Request not found or not authorized.' });
+    }
+
+    // If the request status is 'closed', update only pending statuses in accepted_requests to 'declined'
+    if (updatedStatus === 'closed') {  // Use updatedStatus here to check if the status is closed
+      const updatePendingStatusQuery = `
+        UPDATE accepted_requests
+        SET creator_status = 'declined'
+        WHERE request_id = ? AND creator_status = 'pending'
+      `;
+
+      db.query(updatePendingStatusQuery, [requestId], (err, result) => {
+        if (err) {
+          console.error('Error updating creator_status for pending requests:', err);
+          return res.status(500).json({ error: 'Failed to update pending statuses to declined.' });
+        }
+        console.log(`Updated ${result.affectedRows} rows to 'declined' for request_id: ${requestId}`);
+        return res.status(200).json({ message: 'Request closed and all pending users marked as declined!' });
+      });      
+    } else {
+      // If the request is not closed, respond with a successful update message
+      return res.status(200).json({ message: 'Request updated successfully!' });
+    }
+  });
+});
+
+// Delete a request (protected route)
+app.delete('/requests/:id', authenticateToken, (req, res) => {
+  const requestId = req.params.id;
+  const userId = req.user.id;
+
+  // First, delete accepted users related to the request
+  const deleteAcceptedUsersQuery = `
+    DELETE FROM accepted_requests
+    WHERE request_id = ?
+  `;
+
+  db.query(deleteAcceptedUsersQuery, [requestId], (err) => {
+    if (err) {
+      console.error('Error deleting accepted users:', err);
+      return res.status(500).json({ error: 'Failed to delete accepted users for the request.' });
+    }
+
+    // Now delete the request itself
+    const deleteRequestQuery = `
+      DELETE FROM requests
+      WHERE id = ? AND user_id = ?
+    `;
+
+    db.query(deleteRequestQuery, [requestId, userId], (err, result) => {
+      if (err) {
+        console.error('Error deleting the request:', err);
+        return res.status(500).json({ error: 'Failed to delete the request.' });
+      } else if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'Request not found or not authorized.' });
+      }
+      res.status(200).json({ message: 'Request and its accepted users deleted successfully!' });
+    });
+  });
+});
+
+// Cancel a request (protected route)
+app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
   const query = `
-      INSERT INTO accepted_requests (request_id, user_id, status)
-      VALUES (?, ?, 'accepted')
-      ON DUPLICATE KEY UPDATE status = 'accepted';
+      UPDATE requests
+      SET request_status = 'canceled'
+      WHERE id = ? AND user_id = ?
   `;
 
   db.query(query, [requestId, userId], (err, result) => {
-      if (err) {
-          console.error('Error accepting the request:', err);
-          return res.status(500).json({ error: 'Failed to accept the request.' });
-      }
-      res.status(200).json({ message: 'Request accepted successfully!' });
+    if (err) {
+      console.error('Error canceling the request:', err);
+      return res.status(500).json({ error: 'Failed to cancel the request.' });
+    } else if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Request not found or not authorized.' });
+    }
+    res.status(200).json({ message: 'Request canceled successfully!' });
   });
 });
 
-// Decline a user for a request
-app.post('/requests/:id/decline', authenticateToken, (req, res) => {
+// Accept a request (protected route)
+app.post('/requests/:id/accept', authenticateToken, (req, res) => {
   const requestId = req.params.id;
-  const userId = req.body.userId;
+  const userId = req.user.id;
 
-  const query = `
-      DELETE FROM accepted_requests
-      WHERE request_id = ? AND user_id = ?;
+  // First, check if the request exists and is open
+  const checkRequestQuery = `
+      SELECT * FROM requests 
+      WHERE id = ? AND request_status = 'open'
   `;
 
-  db.query(query, [requestId, userId], (err, result) => {
+  db.query(checkRequestQuery, [requestId], (err, results) => {
       if (err) {
-          console.error('Error declining the user:', err);
-          return res.status(500).json({ error: 'Failed to decline the user.' });
+          console.error('Error checking request:', err);
+          return res.status(500).json({ error: 'Failed to check request status' });
       }
-      res.status(200).json({ message: 'User declined successfully!' });
+
+      if (results.length === 0) {
+          return res.status(404).json({ error: 'Request not found or is not open for acceptance' });
+      }
+
+      // Update the request to mark it as "accepted" in accepted_requests table
+      const acceptRequestQuery = `
+          INSERT INTO accepted_requests (request_id, user_id, status, creator_status)
+          VALUES (?, ?, 'accepted', 'pending')
+          ON DUPLICATE KEY UPDATE status = 'accepted';
+      `;
+
+      db.query(acceptRequestQuery, [requestId, userId], (err, result) => {
+          if (err) {
+              console.error('Error accepting request:', err);
+              return res.status(500).json({ error: 'Failed to accept the request' });
+          }
+
+          // Update the main request status if needed (optional)
+          const updateRequestStatusQuery = `
+              UPDATE requests
+              SET request_status = 'accepted'
+              WHERE id = ?
+          `;
+
+          db.query(updateRequestStatusQuery, [requestId], (err, result) => {
+              if (err) {
+                  console.error('Error updating request status:', err);
+                  return res.status(500).json({ error: 'Failed to update request status' });
+              }
+
+              res.status(200).json({ message: 'Request accepted successfully!' });
+          });
+      });
+  });
+});
+
+app.post('/requests/:id/respond', authenticateToken, (req, res) => {
+  const requestId = req.params.id;
+  const userId = req.body.userId; // ID of the user being responded to
+  const { action } = req.body; // "accept" or "decline"
+
+  let query;
+  let message;
+
+  if (action === 'accept') {
+    query = `
+      UPDATE accepted_requests
+      SET status = 'accepted'
+      WHERE request_id = ? AND user_id = ?;
+    `;
+    message = 'User accepted successfully!';
+  } else if (action === 'decline') {
+    query = `
+      DELETE FROM accepted_requests
+      WHERE request_id = ? AND user_id = ?;
+    `;
+    message = 'User declined successfully!';
+  } else {
+    return res.status(400).json({ error: 'Invalid action provided' });
+  }
+
+  db.query(query, [requestId, userId], (err, result) => {
+    if (err) {
+      console.error('Error updating user response:', err);
+      return res.status(500).json({ error: 'Failed to update user response' });
+    }
+    res.status(200).json({ message });
   });
 });
 
@@ -294,9 +488,217 @@ app.get('/user/:userId', authenticateToken, (req, res) => {
     } else if (results.length === 0) {
       return res.status(404).send({ error: 'User not found' });
     } else {
-      return res.status(200).json(results[0]);
+      const user = results[0];
+
+      // Convert profile_image to Base64 if it exists
+      if (user.profile_image) {
+        user.profile_image = user.profile_image.toString('base64');
+      }
+
+      res.status(200).json(user);
     }
   });
+});
+
+app.get('/proxy-distance', async (req, res) => {
+  const { origins, destinations } = req.query;
+  try {
+    const response = await axios.get(`https://maps.googleapis.com/maps/api/distancematrix/json`, {
+      params: {
+        origins,
+        destinations,
+        key: process.env.GOOGLE_MAPS_API_KEY, // Store your key in .env for security
+      }
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error in proxy distance request:", error);
+    res.status(500).send("Error fetching distance from Google API");
+  }
+});
+
+// Endpoint to like a user's profile
+app.post('/user/:userId/like', authenticateToken, async (req, res) => {
+  const { userId } = req.params;
+  const likedBy = req.user.id;
+
+  const query = `INSERT INTO likes (user_id, liked_by) VALUES (?, ?) ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP`;
+
+  db.query(query, [userId, likedBy], (err) => {
+      if (err) {
+          console.error("Error adding like:", err);
+          return res.status(500).send({ error: 'Failed to add like' });
+      }
+      res.status(200).send({ message: 'Like added successfully!' });
+  });
+});
+
+// Endpoint to add a comment to a user's profile
+app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
+  const { userId } = req.params;
+  const commentedBy = req.user.id;
+  const { comment } = req.body;
+
+  const query = `INSERT INTO comments (user_id, commented_by, comment) VALUES (?, ?, ?)`;
+
+  db.query(query, [userId, commentedBy, comment], (err) => {
+      if (err) {
+          console.error("Error adding comment:", err);
+          return res.status(500).send({ error: 'Failed to add comment' });
+      }
+      res.status(200).send({ message: 'Comment added successfully!' });
+  });
+});
+
+// Endpoint to get the like count for a user's profile
+app.get('/user/:userId/likes', authenticateToken, (req, res) => {
+  const { userId } = req.params;
+
+  const query = `SELECT COUNT(*) AS likesCount FROM likes WHERE user_id = ?`;
+
+  db.query(query, [userId], (err, results) => {
+      if (err) {
+          console.error("Error fetching likes:", err);
+          return res.status(500).send({ error: 'Failed to fetch likes' });
+      }
+      res.status(200).send(results[0]);
+  });
+});
+
+// Endpoint to get comments for a user's profile
+app.get('/user/:userId/comments', authenticateToken, (req, res) => {
+  const { userId } = req.params;
+
+  const query = `
+      SELECT c.comment, c.created_at, u.name AS commented_by_name, u.surname AS commented_by_surname 
+      FROM comments c
+      JOIN users u ON c.commented_by = u.id
+      WHERE c.user_id = ?
+      ORDER BY c.created_at DESC
+  `;
+
+  db.query(query, [userId], (err, results) => {
+      if (err) {
+          console.error("Error fetching comments:", err);
+          return res.status(500).send({ error: 'Failed to fetch comments' });
+      }
+      res.status(200).send(results);
+  });
+});
+
+app.get('/analytics/:userId', authenticateToken, async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Trip Count: Closed (Completed) Trips
+    const completedTripsQuery = `
+      SELECT id, start_location, end_location, DATE(created_at) AS travelDate
+      FROM requests
+      WHERE user_id = ? AND request_status = 'closed';
+    `;
+
+    // Trips Accepted by both creator and user
+    const tripsAcceptedQuery = `
+      SELECT COUNT(*) AS tripsAccepted
+      FROM accepted_requests
+      WHERE user_id = ? 
+        AND status = 'accepted' 
+        AND creator_status = 'accepted';
+    `;
+
+    // Cancellation Rate
+    const totalRequestsQuery = `SELECT COUNT(*) AS totalRequests FROM requests WHERE user_id = ?;`;
+    const canceledRequestsQuery = `SELECT COUNT(*) AS canceledRequests FROM requests WHERE user_id = ? AND request_status = 'canceled';`;
+
+    // Peak Hours of Request Creation
+    const peakHoursQuery = `
+      SELECT HOUR(created_at) AS hour, COUNT(*) AS requestCount
+      FROM requests
+      WHERE user_id = ?
+      GROUP BY HOUR(created_at)
+      ORDER BY requestCount DESC
+      LIMIT 3;
+    `;
+
+    // Preferred Request Types
+    const preferredRequestTypesQuery = `
+      SELECT request_type, COUNT(*) AS count
+      FROM requests
+      WHERE user_id = ?
+      GROUP BY request_type
+      ORDER BY count DESC;
+    `;
+
+    // Execute queries for static data
+    const [completedTripsResults] = await db.promise().query(completedTripsQuery, [userId]);
+    const [tripsAcceptedResults] = await db.promise().query(tripsAcceptedQuery, [userId]);
+    const [totalRequestsResults] = await db.promise().query(totalRequestsQuery, [userId]);
+    const [canceledRequestsResults] = await db.promise().query(canceledRequestsQuery, [userId]);
+    const [peakHoursResults] = await db.promise().query(peakHoursQuery, [userId]);
+    const [preferredRequestTypesResults] = await db.promise().query(preferredRequestTypesQuery, [userId]);
+
+    // Process data with defaults if results are missing
+    const completedTrips = completedTripsResults.length;
+    const tripsAccepted = tripsAcceptedResults[0]?.tripsAccepted || 0;
+    const totalRequests = totalRequestsResults[0]?.totalRequests || 0;
+    const canceledRequests = canceledRequestsResults[0]?.canceledRequests || 0;
+    const cancellationRate = totalRequests > 0 ? (canceledRequests / totalRequests) * 100 : 0;
+    const peakHours = peakHoursResults || [];
+    const preferredRequestTypes = preferredRequestTypesResults || [];
+
+    // Calculate distances using Google Maps API
+    const distanceByDate = {};
+    for (const trip of completedTripsResults) {
+      const { id, start_location, end_location, travelDate } = trip;
+
+      // Call Google Maps Distance Matrix API
+      try {
+        const response = await axios.get('https://maps.googleapis.com/maps/api/distancematrix/json', {
+          params: {
+            origins: start_location,
+            destinations: end_location,
+            key: process.env.GOOGLE_MAPS_API_KEY,
+          },
+        });
+
+        // Check if the response contains the necessary distance information
+        const distanceElement = response.data.rows?.[0]?.elements?.[0];
+        if (distanceElement && distanceElement.status === "OK" && distanceElement.distance) {
+          const distance = distanceElement.distance.value / 1000; // Convert meters to kilometers
+
+          // Aggregate distance by date
+          if (distanceByDate[travelDate]) {
+            distanceByDate[travelDate] += distance;
+          } else {
+            distanceByDate[travelDate] = distance;
+          }
+        } else {
+          console.warn(`Warning: Distance information missing for request ${id}`);
+        }
+      } catch (error) {
+        console.error(`Error fetching distance for request ${id}:`, error);
+      }
+    }
+
+    // Convert distanceByDate to an array format
+    const distanceByDateArray = Object.entries(distanceByDate).map(([date, totalDistance]) => ({
+      travelDate: date,
+      totalDistance,
+    }));
+
+    // Send back the analytics data
+    res.status(200).json({
+      completedTrips,
+      tripsAccepted,
+      distanceByDate: distanceByDateArray,
+      cancellationRate,
+      peakHours,
+      preferredRequestTypes,
+    });
+  } catch (error) {
+    console.error('Error fetching analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
 });
 
 // Start the server

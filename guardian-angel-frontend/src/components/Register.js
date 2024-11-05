@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import logo from '../assets/guardian-angel-logo_pink.png'; // Import the logo
 import './Register.css';
 
 const Register = () => {
@@ -40,6 +41,7 @@ const Register = () => {
   return (
     <div className="full-page-container">
       <div className="form-container">
+      <img src={logo} alt="Guardian Angel Logo" className="auth-logo" />
         <form onSubmit={handleSubmit}>
           <h2>Register</h2>
           <input type="text" name="name" placeholder="Name" value={formData.name} onChange={handleChange} required />

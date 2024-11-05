@@ -2,16 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import './Navbar.css';
+import logo from '../assets/guardian-angel-logo.png';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
 const Navbar = () => {
   const [userName, setUserName] = useState('Guest');
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // State for menu toggle
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleLogout = () => {
-    localStorage.removeItem('token'); // Remove token on logout
-    navigate('/login'); // Redirect to login page
+    localStorage.removeItem('userId');
+    localStorage.removeItem('token');
+    localStorage.removeItem('name');
+    navigate('/login');
   };
 
   useEffect(() => {
@@ -22,18 +26,18 @@ const Navbar = () => {
           headers: { Authorization: `Bearer ${token}` },
         })
         .then((response) => {
-          setUserName(response.data.name); // Assumes response has 'name' field
+          setUserName(response.data.name);
         })
         .catch((error) => {
           console.error('Error fetching user data:', error);
           if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-            handleLogout(); // Logs out if token is invalid or expired
+            handleLogout();
           } else {
             console.warn('Failed to load profile data. Please try again later.');
           }
         });
     }
-  }, [navigate]); // Dependencies updated to include `navigate`
+  }, [navigate]);
 
   // Prevent Navbar from rendering on login or register pages
   if (location.pathname === '/login' || location.pathname === '/register') {
@@ -43,9 +47,15 @@ const Navbar = () => {
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <Link to="/home">Guardian Angel</Link>
+        <Link to="/home">
+          <img src={logo} alt="Guardian Angel Logo" className="navbar-logo" />
+          Guardian Angel
+        </Link>
       </div>
-      <ul className="navbar-links">
+      <div className="burger-menu" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+        <i className="fas fa-bars"></i>
+      </div>
+      <ul className={`navbar-links ${isMenuOpen ? 'active' : ''}`}>
         <li><Link to="/home">Home</Link></li>
         <li><Link to="/view-requests">View Requests</Link></li>
         <li><Link to="/create-request">Create Request</Link></li>

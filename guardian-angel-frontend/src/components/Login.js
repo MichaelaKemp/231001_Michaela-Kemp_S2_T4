@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import './Login.css';
+import logo from '../assets/guardian-angel-logo_pink.png';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -21,24 +22,30 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:5000/login', formData);
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('name', response.data.name);
-      setError('');
-      localStorage.removeItem('loginError');
-      toast.success('Login successful! Redirecting...');
-      setTimeout(() => navigate('/home'), 5800);
+        const response = await axios.post('http://localhost:5000/login', formData);
+        
+        // Store user details in localStorage
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('name', response.data.name);
+        localStorage.setItem('userId', response.data.userId);
+
+        setError('');
+        localStorage.removeItem('loginError');
+        toast.success('Login successful! Redirecting...', { autoClose: 1500 });
+        
+        setTimeout(() => navigate('/home'), 2200);
     } catch {
-      const errorMessage = 'Invalid email or password. Please try again.';
-      setError(errorMessage);
-      localStorage.setItem('loginError', errorMessage);
-      setFormData({ email: '', password: '' });
+        const errorMessage = 'Invalid email or password. Please try again.';
+        setError(errorMessage);
+        localStorage.setItem('loginError', errorMessage);
+        setFormData({ email: '', password: '' });
     }
   };
 
   return (
     <div className="full-page-container">
       <div className="form-container">
+      <img src={logo} alt="Guardian Angel Logo" className="auth-logo" />
         <form onSubmit={handleSubmit} noValidate>
           <h2>Login</h2>
           <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required />

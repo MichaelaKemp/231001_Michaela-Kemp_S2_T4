@@ -1,14 +1,15 @@
 import React from 'react';
 import Navbar from '../components/Navbar';
 import './Home.css';
+import logo from '../assets/guardian-angel-logo.png';
 
 const Home = () => {
   return (
     <div>
       <header className="home-header gradient-bg text-white py-16">
         <div className="container text-center">
-          <img src="https://service-jobs-images.s3.us-east-2.amazonaws.com/7rl98t1weu387r43il97h6ipk1l7" alt="TravelBuddies Logo" className="logo-img" />
-          <h1>Welcome to Guardian Angel</h1>
+        <img src={logo} alt="Guardian Angel Logo" className="logo-img" />
+        <h1>Welcome to Guardian Angel</h1>
           <h2>Find Trip Partners in South Africa</h2>
           <a className="get-started-btn" href="#">Get Started</a>
         </div>
