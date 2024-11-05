@@ -10,17 +10,18 @@ const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 
-const app = express(); // Add this line to initialize the app
+const cors = require('cors');
 
+// Define CORS options with the exact frontend URL
 const corsOptions = {
-  origin: process.env.REACT_APP_BACKEND_URL, // Allow requests from frontend
+  origin: "https://guardian-angel-frontend-za-b3b88c77cacc.herokuapp.com", // Replace this with your exact frontend origin URL
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-  credentials: true, // Set to true if handling cookies or credentials
+  credentials: true,
 };
-app.use(cors(corsOptions));
 
-app.use(bodyParser.json()); // Parse JSON bodies
-app.use(bodyParser.urlencoded({ extended: true })); // Parse URL-encoded bodies
+// Initialize express app
+const app = express();
+app.use(cors(corsOptions)); // Apply CORS middleware with defined options
 
 const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
 const dbOptions = {
