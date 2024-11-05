@@ -1,5 +1,6 @@
 const express = require('express');
-const mysql = require('mysql2'); // Use mysql2 instead of mysql
+const mysql = require('mysql2/promise'); // Use mysql2 instead of mysql
+const url = require('url');
 const bcrypt = require('bcryptjs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -8,23 +9,32 @@ const multer = require('multer');
 const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
-const dbUrl = process.env.JAWSDB_URL || process.env.DATABASE_URL;
 const app = express(); // Add this line to initialize the app
 
 app.use(cors()); // Allow all origins (customize as needed)
 app.use(bodyParser.json()); // Parse JSON bodies
 app.use(bodyParser.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-// Database connection
-const db = mysql.createConnection(dbUrl);
+const allowedOrigins = [process.env.REACT_APP_BACKEND_URL];
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+}));
 
-db.connect((err) => {
-  if (err) {
-    console.error('Error connecting to database:', err);
-  } else {
-    console.log('Connected to MySQL database.');
-  }
-});
+const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
+const dbOptions = {
+  host: new URL(dbUrl).hostname,
+  user: new URL(dbUrl).username,
+  password: new URL(dbUrl).password,
+  database: new URL(dbUrl).pathname.slice(1),
+};
+
+const db = mysql.createConnection(dbOptions);
 
 // JWT authentication middleware
 const authenticateToken = (req, res, next) => {
@@ -696,6 +706,15 @@ app.get('/analytics/:userId', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }
 });
+
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  app.use(express.static(path.join(__dirname, 'frontend/build')));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'frontend/build', 'index.html'));
+  });
+}
 
 // Start the server
 const PORT = process.env.PORT || 5000;
