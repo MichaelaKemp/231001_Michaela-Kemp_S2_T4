@@ -65,6 +65,7 @@ app.post('/api/register', async (req, res) => {
 
 // Login User
 app.post('/api/login', async (req, res) => {
+  console.log('Request Body:', req.body); // Add this line to log the request body
   const { email, password } = req.body;
 
   try {
