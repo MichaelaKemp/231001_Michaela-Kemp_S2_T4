@@ -170,20 +170,31 @@ app.get('/user/profile', authenticateToken, (req, res) => {
 });
 
 // Update user profile (protected route)
-app.post('/user/profile/update', (req, res) => {
+app.get('/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
-  const { name, surname, email, bio } = req.body;
+  console.log("Fetching profile for user ID:", userId);
+  
+  // Check if profile data is already in cache
+  const cachedProfile = cache.get(userId);
+  if (cachedProfile) {
+    console.log("Returning cached profile data.");
+    return res.status(200).json(cachedProfile);
+  }
 
-  let query = `UPDATE users SET name = ?, surname = ?, email = ?, bio = ? WHERE id = ?`;
-  const values = [name, surname, email, bio, userId];
-
-  db.query(query, values, (err, result) => {
+  // Fetch from database if not in cache
+  db.query('SELECT id, name, surname, email, bio FROM users WHERE id = ?', [userId], (err, results) => {
     if (err) {
-      console.error('Error updating profile:', err);
-      return res.status(500).send({ error: 'Failed to update profile' });
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    res.status(200).send({ message: 'Profile updated successfully' });
+    const user = results[0];
+    cache.set(userId, user); // Store the result in cache
+    console.log("Profile data fetched from database.");
+    res.status(200).json(user);
   });
 });
 
@@ -205,76 +216,108 @@ app.post('/user/request/update', (req, res) => {
   });
 });
 
-// Fetch all open requests along with the user's details
-// Fetch all open requests along with the user's details
-app.get('/all-open-requests', async (req, res) => {
-  // Check if data is already cached
+// Fetch all open requests with minimal data in cache
+app.get('/all-open-requests', (req, res) => {
   const cachedRequests = cache.get('allOpenRequests');
   if (cachedRequests) {
     return res.status(200).json(cachedRequests);
   }
 
+  // Limit to essential fields only
   const fetchRequestsQuery = `
-    SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status,
-           r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname
-    FROM requests r
-    JOIN users u ON r.user_id = u.id
-    WHERE r.request_status = 'open'
-    ORDER BY r.meeting_time DESC
+    SELECT 
+      r.id AS request_id, 
+      r.start_location, 
+      r.end_location, 
+      r.meeting_time, 
+      u.name AS requester_name
+    FROM 
+      requests r
+    JOIN 
+      users u ON r.user_id = u.id
+    WHERE 
+      r.request_status = 'open'
+    ORDER BY 
+      r.meeting_time DESC
   `;
 
-  try {
-    const [requests] = await db.query(fetchRequestsQuery);
-    cache.set('allOpenRequests', requests, 600); // Cache the result for 10 minutes
+  db.query(fetchRequestsQuery, (err, requests) => {
+    if (err) {
+      return res.status(500).send({ error: 'Error fetching requests' });
+    }
+
+    // Cache the minimal data for faster retrieval
+    cache.set('allOpenRequests', requests, 600); // 10-minute TTL
     res.status(200).json(requests);
-  } catch (err) {
-    console.error('Error fetching requests:', err);
-    res.status(500).send({ error: 'Error fetching requests' });
-  }
+  });
 });
 
 // Fetch all requests and accepted users
 app.get('/user/requests', (req, res) => {
   const userId = req.user.id;
 
-  const fetchRequestsQuery = 
-    `SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, r.created_at, r.meeting_time, r.request_type
-    FROM requests r
-    WHERE r.user_id = ?
-    ORDER BY r.created_at DESC`
-  ;
+  // Modified query to join accepted users with requests in a single query
+  const fetchRequestsQuery = `
+    SELECT 
+      r.id AS request_id, 
+      r.start_location, 
+      r.end_location, 
+      r.request_status, 
+      r.created_at, 
+      r.meeting_time, 
+      r.request_type,
+      u.id AS accepted_user_id, 
+      u.name AS accepted_user_name, 
+      u.surname AS accepted_user_surname
+    FROM 
+      requests r
+    LEFT JOIN 
+      accepted_requests ar ON r.id = ar.request_id
+    LEFT JOIN 
+      users u ON ar.user_id = u.id
+    WHERE 
+      r.user_id = ?
+    ORDER BY 
+      r.created_at DESC
+  `;
 
-  db.query(fetchRequestsQuery, [userId], (err, requests) => {
+  db.query(fetchRequestsQuery, [userId], (err, results) => {
     if (err) {
       return res.status(500).send({ error: 'Error fetching requests' });
     }
 
-    const fetchAcceptedUsersPromises = requests.map(request => {
-      const acceptedUsersQuery = 
-        `SELECT u.id, u.name, u.surname
-        FROM accepted_requests ar
-        JOIN users u ON ar.user_id = u.id
-        WHERE ar.request_id = ?`
-      ;
+    // Transform results into structured format with accepted users grouped by request
+    const requests = results.reduce((acc, row) => {
+      // Find if request already exists in the accumulator
+      const requestIndex = acc.findIndex(req => req.request_id === row.request_id);
 
-      return new Promise((resolve, reject) => {
-        db.query(acceptedUsersQuery, [request.request_id], (err, acceptedUsers) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve({ ...request, acceptedUsers });
-          }
+      if (requestIndex === -1) {
+        // Add new request to the accumulator if not already present
+        acc.push({
+          request_id: row.request_id,
+          start_location: row.start_location,
+          end_location: row.end_location,
+          request_status: row.request_status,
+          created_at: row.created_at,
+          meeting_time: row.meeting_time,
+          request_type: row.request_type,
+          acceptedUsers: row.accepted_user_id
+            ? [{ id: row.accepted_user_id, name: row.accepted_user_name, surname: row.accepted_user_surname }]
+            : []
         });
-      });
-    });
+      } else if (row.accepted_user_id) {
+        // If the request already exists, add the accepted user to the acceptedUsers array
+        acc[requestIndex].acceptedUsers.push({
+          id: row.accepted_user_id,
+          name: row.accepted_user_name,
+          surname: row.accepted_user_surname
+        });
+      }
 
-    Promise.all(fetchAcceptedUsersPromises)
-      .then(requestsWithAcceptedUsers => {
-        res.status(200).json(requestsWithAcceptedUsers);
-      })
-      .catch(err => {
-        res.status(500).send({ error: 'Error fetching accepted users' });
-      });
+      return acc;
+    }, []);
+
+    res.status(200).json(requests);
   });
 });
 
@@ -588,43 +631,41 @@ app.get('/user/:userId/comments', (req, res) => {
   });
 });
 
+// Optimized Analytics Endpoint
+// Simplified /analytics/:userId endpoint
 app.get('/analytics/:userId', async (req, res) => {
   const { userId } = req.params;
-
   try {
-    const completedTripsQuery = 
-      `SELECT id, start_location, end_location, DATE(created_at) AS travelDate
-      FROM requests
-      WHERE user_id = ? AND request_status = 'closed'`;
-    ;
-    const [completedTripsResults] = await db.query(completedTripsQuery, [userId]);
+    const [completedTripsResult] = await db.query(
+      `SELECT COUNT(id) AS completedTrips FROM requests WHERE user_id = ? AND request_status = 'closed'`, 
+      [userId]
+    );
 
-    // Additional queries
-    const tripsAcceptedQuery = 
-      `SELECT COUNT(*) AS tripsAccepted
-      FROM accepted_requests
-      WHERE user_id = ? 
-        AND status = 'accepted' 
-        AND creator_status = 'accepted'`;
-    ;
-    const [tripsAcceptedResults] = await db.query(tripsAcceptedQuery, [userId]);
+    const [tripsAcceptedResult] = await db.query(
+      `SELECT COUNT(*) AS tripsAccepted FROM accepted_requests WHERE user_id = ? AND status = 'accepted' AND creator_status = 'accepted'`,
+      [userId]
+    );
 
-    const totalRequestsQuery = `SELECT COUNT(*) AS totalRequests FROM requests WHERE user_id = ?;`;
-    const canceledRequestsQuery = `SELECT COUNT(*) AS canceledRequests FROM requests WHERE user_id = ? AND request_status = 'canceled';`;
+    const [cancellationResult] = await db.query(
+      `SELECT COUNT(id) AS totalRequests, 
+       SUM(CASE WHEN request_status = 'canceled' THEN 1 ELSE 0 END) AS canceledRequests 
+       FROM requests WHERE user_id = ?`, 
+      [userId]
+    );
 
-    const [totalRequestsResults] = await db.query(totalRequestsQuery, [userId]);
-    const [canceledRequestsResults] = await db.query(canceledRequestsQuery, [userId]);
+    const [preferredRequestTypesResult] = await db.query(
+      `SELECT request_type, COUNT(*) AS count FROM requests WHERE user_id = ? GROUP BY request_type ORDER BY count DESC LIMIT 5`,
+      [userId]
+    );
 
-    const completedTrips = completedTripsResults.length;
-    const tripsAccepted = tripsAcceptedResults[0]?.tripsAccepted || 0;
-    const totalRequests = totalRequestsResults[0]?.totalRequests || 0;
-    const canceledRequests = canceledRequestsResults[0]?.canceledRequests || 0;
-    const cancellationRate = totalRequests > 0 ? (canceledRequests / totalRequests) * 100 : 0;
+    // Calculate fields for the frontend
+    const cancellationRate = (cancellationResult[0].canceledRequests / cancellationResult[0].totalRequests) * 100;
 
     res.status(200).json({
-      completedTrips,
-      tripsAccepted,
-      cancellationRate,
+      completedTrips: completedTripsResult[0].completedTrips,
+      tripsAccepted: tripsAcceptedResult[0].tripsAccepted,
+      cancellationRate: cancellationRate || 0,
+      preferredRequestTypes: preferredRequestTypesResult,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch analytics' });
