@@ -1,0 +1,85 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Compiled binary addons
+build/Release
+
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional cache directories
+.cache/
+.parcel-cache/
+.temp/
+
+# Yarn cache and configuration
+.yarn/*
+!.yarn/cache
+!.yarn/releases
+!.yarn/plugins
+.yarn-integrity
+.pnp.*
+
+# dotenv environment files
+.env
+.env.local
+.env.*.local
+
+# Coverage and test reports
+coverage/
+*.lcov
+.nyc_output/
+
+# Ignored build outputs (Keep frontend build folder tracked)
+dist/
+.nuxt/
+.next/
+.vuepress/dist
+
+# Ignore public files in certain projects
+.cache/
+
+# Git submodule-related files (Ensure no submodule issues)
+.gitmodules
+.git/config
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Ignore lock files (Optional)
+package-lock.json
+yarn.lock
+
+# Ignore VSCode test output
+.vscode-test/
+
+# .gitignore
+.env
+guardian-angel-backend/.env
+guardian-angel-frontend/.env
