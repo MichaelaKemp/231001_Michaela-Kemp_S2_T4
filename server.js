@@ -47,7 +47,7 @@ function authenticateToken(req, res, next) {
   });  
 }
 
-const dbUrl = process.env.DATABASE_URL || process.env.JAWSDB_URL;
+const dbUrl = process.env.DATABASE_URL;
 
 if (!dbUrl) {
   console.error("Database URL is not set.");
@@ -58,8 +58,9 @@ const dbOptions = {
   host: new URL(dbUrl).hostname,
   user: new URL(dbUrl).username,
   password: new URL(dbUrl).password,
-  database: new URL(dbUrl).pathname.slice(1), // removes the leading "/"
-  port: new URL(dbUrl).port || 3306, // explicitly specify port if needed
+  database: new URL(dbUrl).pathname.slice(1),
+  port: new URL(dbUrl).port || 3306,
+  ssl: { rejectUnauthorized: false } // Adding SSL configuration for Digital Ocean
 };
 
 console.log('Database connection options:', {
