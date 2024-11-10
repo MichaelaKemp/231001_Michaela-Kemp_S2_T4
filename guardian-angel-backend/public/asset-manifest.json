@@ -1,0 +1,25 @@
+{
+  "files": {
+    "main.css": "/static/css/main.f9afd9bf.css",
+    "main.js": "/static/js/main.9f86910b.js",
+    "static/js/453.d8ebbee2.chunk.js": "/static/js/453.d8ebbee2.chunk.js",
+    "static/media/fa-solid-900.ttf": "/static/media/fa-solid-900.07ed6d5fa32c1d54af0f.ttf",
+    "static/media/fa-brands-400.ttf": "/static/media/fa-brands-400.0ff70dcbf135d859ebf3.ttf",
+    "static/media/fa-solid-900.woff2": "/static/media/fa-solid-900.93f719f4d62bfa3e748c.woff2",
+    "static/media/fa-brands-400.woff2": "/static/media/fa-brands-400.bb8d5a145e22822103fb.woff2",
+    "static/media/fa-regular-400.ttf": "/static/media/fa-regular-400.17a6e1aebccdbaa39e78.ttf",
+    "static/media/fa-regular-400.woff2": "/static/media/fa-regular-400.bc3722686635b5f86132.woff2",
+    "static/media/guardian-angel-logo_pink.png": "/static/media/guardian-angel-logo_pink.d80d8404f7cedeb26301.png",
+    "static/media/guardian-angel-logo.png": "/static/media/guardian-angel-logo.1fe4f7872f9479b516fe.png",
+    "static/media/fa-v4compatibility.ttf": "/static/media/fa-v4compatibility.0f6cb412603527bda691.ttf",
+    "static/media/fa-v4compatibility.woff2": "/static/media/fa-v4compatibility.6cfec8414be20e2c3426.woff2",
+    "index.html": "/index.html",
+    "main.f9afd9bf.css.map": "/static/css/main.f9afd9bf.css.map",
+    "main.9f86910b.js.map": "/static/js/main.9f86910b.js.map",
+    "453.d8ebbee2.chunk.js.map": "/static/js/453.d8ebbee2.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.f9afd9bf.css",
+    "static/js/main.9f86910b.js"
+  ]
+}
