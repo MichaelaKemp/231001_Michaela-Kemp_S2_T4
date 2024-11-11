@@ -4,7 +4,7 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 import './Login.css';
 import logo from '../assets/guardian-angel-logo_pink.png';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -23,7 +23,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post(`${API_BASE_URL}/login`, formData);
+      const response = await axios.post(`${API_BASE_URL}/api/login`, formData);
       
       // Store user details in localStorage
       const { token, name, userId } = response.data;

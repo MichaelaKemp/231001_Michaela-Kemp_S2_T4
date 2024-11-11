@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import logo from '../assets/guardian-angel-logo_pink.png'; // Import the logo
 import './Register.css';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 const Register = () => {
   const [formData, setFormData] = useState({ name: '', surname: '', email: '', password: '', confirmPassword: '' });
@@ -22,22 +22,23 @@ const Register = () => {
       return;
     }
     try {
-      const response = await axios.post(`${API_BASE_URL}/register`, {
+      const response = await axios.post(`${API_BASE_URL}/api/register`, {
         name: formData.name,
         surname: formData.surname,
         email: formData.email,
-        password: formData.password
+        password: formData.password,
       });
-      
-      // Save the JWT token in localStorage if registration is successful
-      localStorage.setItem('token', response.data.token);
+  
+      const { token, userId } = response.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('userId', userId);
       setError({});
-      navigate('/home');
+      navigate(`/home/${userId}`);
     } catch (err) {
-      console.error('Registration error:', err); // Log the error for debugging
-      setError({ confirmPassword: 'Registration failed. Please try again.' });
+      console.error('Registration error:', err);
+      setError({ ...error, general: 'Registration failed. Please try again.' });
     }
-  };
+  };  
 
   return (
     <div className="full-page-container">

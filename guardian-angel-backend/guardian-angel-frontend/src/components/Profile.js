@@ -1,31 +1,45 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import './Profile.css';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 const Profile = () => {
+  const navigate = useNavigate();
+  const { userId: paramUserId } = useParams();
+  let userId = localStorage.getItem('userId');
+
+  // Update localStorage with userId from URL if available
+  if (paramUserId) {
+    userId = paramUserId;
+    localStorage.setItem('userId', userId);
+  }
+
+  useEffect(() => {
+    if (!userId) {
+      console.error('User ID is missing. Redirecting to login.');
+      toast.error('User ID not found. Please log in.');
+      navigate('/login');
+    }
+  }, [userId, navigate]);
+
   const [profileData, setProfileData] = useState({
     name: '',
     surname: '',
     email: '',
     bio: '',
-    profile_image: '',
   });
+
   const [isEditing, setIsEditing] = useState(false);
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState('');
   const [editRequest, setEditRequest] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
-
   const [showLikes, setShowLikes] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likes, setLikes] = useState([]);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
-
-  const userId = profileData.id; // Ensure userId is fetched or passed correctly
 
   const startLocationRef = useRef(null);
   const endLocationRef = useRef(null);
@@ -49,39 +63,51 @@ const Profile = () => {
     }
   };
 
-// Fetch requests along with accepted users
-const fetchRequests = async () => {
-  try {
-    const requestsRes = await axios.get(`${API_BASE_URL}/user/requests`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    });
+  const fetchProfileData = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/user/${userId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      setProfileData(response.data);
+    } catch (error) {
+      console.error('Error fetching profile data:', error);
+      setError('Failed to load profile data. Please try again later.');
+    }
+  };
 
-    const updatedRequests = requestsRes.data.map((request) => {
-      const currentTime = new Date();
-      const meetingTime = new Date(request.meeting_time);
-
-      // If meeting time has passed, set status to 'closed'
-      if (meetingTime < currentTime && request.request_status !== 'closed') {
-        request.request_status = 'closed';
-        handleUpdateRequest(request);  // Update the status in the backend
-      }
-
-      // Filter out users with creator_status 'declined' if the request is closed
-      if (request.request_status === 'closed' && request.acceptedUsers) {
-        request.acceptedUsers = request.acceptedUsers.filter(user => user.creator_status !== 'declined');
-      }
-      return request;
-    });
-
-    setRequests(updatedRequests);
-  } catch (error) {
-    console.error('Error fetching user requests:', error);
-  }
-};
+  // Fetch requests along with accepted users
+  const fetchRequests = async () => {
+    try {
+      const requestsRes = await axios.get(`${API_BASE_URL}/api/user/requests`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+  
+      const updatedRequests = requestsRes.data.map((request) => {
+        const currentTime = new Date();
+        const meetingTime = new Date(request.meeting_time);
+  
+        // If meeting time has passed, set status to 'closed' locally without calling handleUpdateRequest
+        if (meetingTime < currentTime && request.request_status !== 'closed') {
+          request.request_status = 'closed';
+        }
+  
+        // Filter out users with creator_status 'declined' if the request is closed
+        if (request.request_status === 'closed' && request.acceptedUsers) {
+          request.acceptedUsers = request.acceptedUsers.filter(user => user.creator_status !== 'declined');
+        }
+  
+        return request;
+      });
+  
+      setRequests(updatedRequests);
+    } catch (error) {
+      console.error('Error fetching user requests:', error);
+    }
+  };  
 
   const fetchLikes = async () => {
     try {
-      const likesRes = await axios.get(`${API_BASE_URL}/user/${userId}/likes`, {
+      const likesRes = await axios.get(`${API_BASE_URL}/api/user/${userId}/likes`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       setLikesCount(likesRes.data.likesCount);  // Assuming API response has likesCount
@@ -92,7 +118,7 @@ const fetchRequests = async () => {
   
   const fetchComments = async () => {
     try {
-      const commentsRes = await axios.get(`${API_BASE_URL}/user/${userId}/comments`, {
+      const commentsRes = await axios.get(`${API_BASE_URL}/api/user/${userId}/comments`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       setComments(commentsRes.data);
@@ -102,20 +128,10 @@ const fetchRequests = async () => {
   };  
   
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const profileRes = await axios.get(`${API_BASE_URL}/user/profile`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        });
-        setProfileData(profileRes.data);
-        fetchRequests();
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to load data. Please try again later.');
-      }
-    };
-
-    fetchData();
+    fetchProfileData();
+    fetchRequests();
+    fetchLikes();
+    fetchComments();
 
     if (window.google) {
       initAutocomplete();
@@ -152,10 +168,6 @@ const fetchRequests = async () => {
     }));
   };
 
-  const handleImageChange = (e) => {
-    setImageFile(e.target.files[0]);
-  };
-
   const toggleEdit = () => {
     if (isEditing) {
       handleProfileUpdate();
@@ -164,36 +176,34 @@ const fetchRequests = async () => {
   };
 
   const handleProfileUpdate = async () => {
-    const formData = new FormData();
-    formData.append('name', profileData.name);
-    formData.append('surname', profileData.surname);
-    formData.append('bio', profileData.bio);
-    if (imageFile) {
-      formData.append('image', imageFile);
-    }
+    const payload = {
+      name: profileData.name,
+      surname: profileData.surname,
+      bio: profileData.bio,
+      email: profileData.email,
+    };
+  
     try {
-      const response = await axios.post(`${API_BASE_URL}/user/profile/update`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/api/user/profile/update`, payload, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
       });
       toast.success('Profile updated successfully!');
       setProfileData((prevData) => ({
         ...prevData,
-        profile_image: response.data.profile_image || prevData.profile_image,
       }));
-      setImageFile(null);
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile. Please try again.');
     }
-  };
+  };  
 
   const handleUserResponse = async (requestId, userId, action) => {
     try {
-      await axios.post(`${API_BASE_URL}/requests/${requestId}/respond`, 
+      await axios.post(`${API_BASE_URL}/api/requests/${requestId}/respond`, 
         { userId, action }, 
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       );
@@ -218,7 +228,7 @@ const fetchRequests = async () => {
 
   const handleCancelRequest = async (requestId) => {
     try {
-      await axios.post(`${API_BASE_URL}/requests/${requestId}/cancel`, {}, {
+      await axios.post(`${API_BASE_URL}/api/requests/${requestId}/cancel`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       toast.success('Request canceled successfully!');
@@ -231,7 +241,7 @@ const fetchRequests = async () => {
 
   const handleDeleteRequest = async (requestId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/requests/${requestId}`, {
+      await axios.delete(`${API_BASE_URL}/api/requests/${requestId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       toast.success('Request and accepted users deleted successfully!');
@@ -255,7 +265,7 @@ const fetchRequests = async () => {
     console.log("Minimal Request Payload Size:", JSON.stringify(minimalRequestData).length, "bytes");
   
     try {
-      await axios.put(`${API_BASE_URL}/requests/${updatedRequest.request_id}`, minimalRequestData, {
+      await axios.put(`${API_BASE_URL}/api/requests/${updatedRequest.request_id}`, minimalRequestData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       toast.success('Request updated successfully!');
@@ -320,13 +330,6 @@ const fetchRequests = async () => {
   return (
     <div className="profile-container">
       <div className="profile-image-container">
-        {profileData.profile_image && (
-          <img 
-          src={profileData.profile_image ? `data:image/jpeg;base64,${profileData.profile_image}` : null} 
-          alt="Profile" 
-          className="profile-image" 
-        />        
-        )}
       </div>
       <h2>Edit Profile</h2>
       <form onSubmit={(e) => { e.preventDefault(); handleProfileUpdate(); }}>
@@ -334,7 +337,6 @@ const fetchRequests = async () => {
         <input type="text" name="surname" placeholder="Surname" value={profileData.surname} onChange={handleInputChange} disabled={!isEditing} required />
         <input type="email" name="email" placeholder="Email" value={profileData.email} readOnly />
         <textarea name="bio" placeholder="Bio" value={profileData.bio} onChange={handleInputChange} disabled={!isEditing} />
-        {isEditing && <input type="file" accept="image/*" onChange={handleImageChange} />}
         <button type="button" onClick={toggleEdit}>{isEditing ? 'Save Changes' : 'Edit Profile'}</button>
       </form>
 

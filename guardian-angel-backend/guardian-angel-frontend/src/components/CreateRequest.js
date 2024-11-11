@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './CreateRequest.css';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 const CreateRequest = () => {
   const [formData, setFormData] = useState({
@@ -9,6 +9,7 @@ const CreateRequest = () => {
     end_location: '',
     meeting_time: '',
     request_type: '',
+    userId: localStorage.getItem('userId'), // Initialize userId once
   });
 
   const startLocationRef = useRef(null);
@@ -17,56 +18,47 @@ const CreateRequest = () => {
   const autocompleteEnd = useRef(null);
 
   useEffect(() => {
-    console.log("Google API loaded:", window.google);
     if (window.google) {
-      // Initialize Google Places Autocomplete for start and end locations
       autocompleteStart.current = new window.google.maps.places.Autocomplete(startLocationRef.current, {
         types: ['establishment'],
-        componentRestrictions: { country: 'za' }
+        componentRestrictions: { country: 'za' },
       });
       autocompleteEnd.current = new window.google.maps.places.Autocomplete(endLocationRef.current, {
         types: ['establishment'],
-        componentRestrictions: { country: 'za' }
+        componentRestrictions: { country: 'za' },
       });
 
-      // Log to confirm if autocomplete was initialized
-      console.log("Autocomplete start initialized:", autocompleteStart.current);
-
-      // Add event listeners to handle place selection
       autocompleteStart.current.addListener('place_changed', () => handlePlaceSelect('start_location', autocompleteStart.current));
       autocompleteEnd.current.addListener('place_changed', () => handlePlaceSelect('end_location', autocompleteEnd.current));
     }
   }, []);
 
-  // Handle place selection from autocomplete
   const handlePlaceSelect = (field, autocomplete) => {
     const place = autocomplete.getPlace();
-    console.log("Selected place:", place); // Log the entire place object
-    
     const location = place.formatted_address || place.name;
-    console.log(`Location for ${field}:`, location); // Log the location being set
-  
     setFormData((prevData) => ({
       ...prevData,
       [field]: location,
     }));
-  };  
+  };
 
-  // Handle input changes for fields other than location
   const handleChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Form data before submit:", formData); // Log formData for inspection
-  
+
+    const requestData = {
+      ...formData,
+      userId: localStorage.getItem('userId'),
+    };
+
     try {
-      const response = await axios.post(`${API_BASE_URL}/request`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/api/request`, requestData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       alert(response.data.message);
@@ -74,7 +66,7 @@ const CreateRequest = () => {
       console.error('Error creating request:', error);
       alert('There was an error creating the request. Please try again.');
     }
-  };  
+  };
 
   return (
     <div className="create-request-container">

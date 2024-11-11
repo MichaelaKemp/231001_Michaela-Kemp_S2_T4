@@ -5,13 +5,16 @@ import Login from './components/Login';
 import CreateRequest from './components/CreateRequest';
 import ViewRequests from './components/ViewRequests';
 import Home from './components/Home';
+import ProfilePage from './components/ProfilePage';
 import Profile from './components/Profile';
 import Navbar from './components/Navbar';
-import ProfilePage from './components/ProfilePage';
-import { ToastContainer, toast } from 'react-toastify'; // Import both ToastContainer and toast
-import 'react-toastify/dist/ReactToastify.css'; // Import Toastify styles
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import './style.css';
 import axios from 'axios';
+
+// Set Axios Base URL
+axios.defaults.baseURL = process.env.REACT_APP_API_BASE_URL || '';
 
 // Axios Interceptors setup
 axios.interceptors.request.use(
@@ -31,6 +34,7 @@ axios.interceptors.response.use(
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
       toast.error('Session expired. Please log in again.');
       localStorage.removeItem('token');
+      localStorage.removeItem('userId');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -53,7 +57,12 @@ const AppLayout = () => {
       {showNavbar && <Navbar />}
       <ToastContainer />
       <Routes>
-        <Route path="/" element={<Navigate to="/home" />} />
+        <Route
+          path="/"
+          element={<Navigate to={localStorage.getItem('userId') ? `/home/${localStorage.getItem('userId')}` : '/login'} />}
+        />
+
+        {/* Public routes */}
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
 
@@ -62,8 +71,8 @@ const AppLayout = () => {
           <Route path="/home/:userId" element={<Home />} />
           <Route path="/create-request" element={<CreateRequest />} />
           <Route path="/view-requests" element={<ViewRequests />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/profile/:userId" element={<ProfilePage />} /> {/* Dynamic user profile */}
+          <Route path="/profile" element={<Profile />} /> 
+          <Route path="/profile/:userId" element={<ProfilePage />} />
         </Route>
       </Routes>
     </>

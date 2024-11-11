@@ -3,21 +3,23 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
 import './ViewRequests.css';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 const ViewRequests = () => {
     const [requests, setRequests] = useState([]);
     const [userLocation, setUserLocation] = useState(null);
     const [distances, setDistances] = useState({});
 
-    // Retrieve userId from localStorage and handle cases where it might not be present
-    const loggedInUserId = parseInt(localStorage.getItem('userId'), 10); // Parse to integer for reliable comparison
-    
-    if (!loggedInUserId) {
-        console.warn("User ID not found in localStorage.");
-    }
+    // Get the logged-in user ID from localStorage
+    const loggedInUserId = parseInt(localStorage.getItem('userId'), 10);
 
-    // Fetch user's current location
+    useEffect(() => {
+        if (!loggedInUserId) {
+            console.warn("User ID not found in localStorage.");
+        }
+    }, [loggedInUserId]);
+
     useEffect(() => {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
@@ -35,22 +37,25 @@ const ViewRequests = () => {
         }
     }, []);
 
-    // Fetch open requests from the backend
-    const fetchRequests = async () => {
-        if (!loggedInUserId) return; // Don't fetch if userId is missing
+    useEffect(() => {
+        const fetchRequests = async () => {
+            if (!loggedInUserId) return;
 
-        try {
-            const response = await axios.get(`${API_BASE_URL}/all-open-requests`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-            });
-            
-            // Filter out requests created by the logged-in user, using integer comparison
-            const filteredRequests = response.data.filter(request => request.user_id !== loggedInUserId);
-            setRequests(filteredRequests);
-        } catch (error) {
-            console.error("Failed to load requests", error);
-        }
-    };
+            try {
+                const response = await axios.get(`${API_BASE_URL}/api/all-open-requests`, {
+                    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                });
+                
+                // Filter requests to only include those not created by the logged-in user
+                const filteredRequests = response.data.filter(request => request.user_id !== loggedInUserId);
+                setRequests(filteredRequests);
+            } catch (error) {
+                console.error("Failed to load requests", error);
+            }
+        };
+
+        fetchRequests();
+    }, [loggedInUserId]);
 
     // Periodically remove expired requests
     useEffect(() => {
@@ -64,41 +69,33 @@ const ViewRequests = () => {
         return () => clearInterval(intervalId);
     }, []);
 
-    // Fetch requests initially
-    useEffect(() => {
-        fetchRequests();
-    }, [loggedInUserId]); // Refetch when loggedInUserId changes
-
     // Fetch distances using backend proxy
-    const fetchDistances = async () => {
-        if (!userLocation || requests.length === 0) return;
-
-        try {
-            const destinations = requests.map(request => request.start_location).join('|');
-            const response = await axios.get(`${API_BASE_URL}/proxy-distance`, {
-                params: {
-                    origins: `${userLocation.lat},${userLocation.lng}`,
-                    destinations: destinations,
-                }
-            });
-
-            const distanceData = {};
-            response.data.rows[0].elements.forEach((element, index) => {
-                distanceData[requests[index].request_id] = element.distance ? element.distance.text : "N/A";
-            });
-            setDistances(distanceData);
-        } catch (error) {
-            console.error("Error fetching distances:", error);
-            toast.error("Failed to fetch distances. Please check your network and API configuration.");
-        }
-    };
-
-    // Fetch distances when userLocation or requests change
     useEffect(() => {
-        if (userLocation) {
-            fetchDistances();
-        }
-    }, [userLocation, requests]);
+        const fetchDistances = async () => {
+            if (!userLocation || requests.length === 0) return;
+
+            try {
+                const destinations = requests.map(request => request.start_location).join('|');
+                const response = await axios.get(`${API_BASE_URL}/api/proxy-distance`, {
+                    params: {
+                        origins: `${userLocation.lat},${userLocation.lng}`,
+                        destinations: destinations,
+                    }
+                });
+
+                const distanceData = {};
+                response.data.rows[0].elements.forEach((element, index) => {
+                    distanceData[requests[index].request_id] = element.distance ? element.distance.text : "N/A";
+                });
+                setDistances(distanceData);
+            } catch (error) {
+                console.error("Error fetching distances:", error);
+                toast.error("Failed to fetch distances. Please check your network and API configuration.");
+            }
+        };
+
+        fetchDistances();
+    }, [userLocation, requests]); // Trigger fetching distances when userLocation or requests change
 
     // Check if the meeting time is within 30 minutes from now
     const isUrgent = (meetingTime) => {
@@ -110,11 +107,11 @@ const ViewRequests = () => {
     // Handle accepting a request
     const handleAcceptRequest = async (requestId) => {
         try {
-            await axios.post(`${API_BASE_URL}/requests/${requestId}/accept`, {}, {
+            await axios.post(`${API_BASE_URL}/api/requests/${requestId}/accept`, {}, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
             toast.success("Request accepted successfully!");
-            fetchRequests(); // Refresh requests after accepting
+            setRequests(requests.filter(request => request.request_id !== requestId)); // Remove accepted request
         } catch (error) {
             toast.error("Failed to accept request.");
         }
@@ -132,13 +129,6 @@ const ViewRequests = () => {
                     <li key={request.request_id} className="request-item">
                         <div className="request-card">
                             <div className="request-user-info">
-                            {request.profile_image && (
-                                <img 
-                                    src={`data:image/jpeg;base64,${request.profile_image}`} 
-                                    alt={`${request.name}'s profile`} 
-                                    className="profile-image" 
-                                />
-                            )}
                                 <Link to={`/profile/${request.user_id}`} className="user-name">
                                     <h4>{request.name} {request.surname}</h4>
                                 </Link>

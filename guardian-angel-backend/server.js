@@ -46,7 +46,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Register User
-app.post('/register', (req, res) => {
+app.post('/api/register', (req, res) => {
   const { name, surname, email, password } = req.body;
   const hashedPassword = bcrypt.hashSync(password, 10);
 
@@ -61,7 +61,7 @@ app.post('/register', (req, res) => {
 });
 
 // Login User
-app.post('/login', (req, res) => {
+app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
 
   const query = 'SELECT * FROM users WHERE email = ?';
@@ -91,7 +91,7 @@ app.post('/login', (req, res) => {
 });
 
 // Create a new request (protected route)
-app.post('/request', authenticateToken, (req, res) => {
+app.post('/api/request', authenticateToken, (req, res) => {
   const { start_location, end_location, meeting_time, request_type } = req.body;
   const userId = req.user.id;
 
@@ -113,7 +113,7 @@ app.post('/request', authenticateToken, (req, res) => {
 });
 
 // Get user profile (protected route)
-app.get('/user/profile', authenticateToken, (req, res) => {
+app.get('/api/user/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   const query = 'SELECT id, name, surname, email, bio FROM users WHERE id = ?';
@@ -131,7 +131,7 @@ app.get('/user/profile', authenticateToken, (req, res) => {
 });
 
 // Update user profile (protected route)
-app.post('/user/profile/update', authenticateToken, (req, res) => {
+app.post('/api/user/profile/update', authenticateToken, (req, res) => {
   const userId = req.user.id;
   const { name, surname, email, bio } = req.body;
   if (!email) {
@@ -157,7 +157,7 @@ app.post('/user/profile/update', authenticateToken, (req, res) => {
   });
 });
 
-app.post('/user/request/update', authenticateToken, (req, res) => {
+app.post('/api/user/request/update', authenticateToken, (req, res) => {
   const { request_id, start_location, end_location, meeting_time, request_type } = req.body;
 
   const query = `
@@ -176,17 +176,18 @@ app.post('/user/request/update', authenticateToken, (req, res) => {
 });
 
 // Fetch all open requests along with the user's details
-app.get('/all-open-requests', authenticateToken, (req, res) => {
+app.get('/api/all-open-requests', authenticateToken, (req, res) => {
+  const userId = req.user.id;
   const fetchRequestsQuery = `
     SELECT r.id AS request_id, r.start_location, r.end_location, r.request_status, 
            r.meeting_time, r.request_type, u.id AS user_id, u.name, u.surname
     FROM requests r
     JOIN users u ON r.user_id = u.id
-    WHERE r.request_status = 'open'
+    WHERE r.request_status = 'open' AND r.user_id != ?
     ORDER BY r.meeting_time DESC
   `;
 
-  db.query(fetchRequestsQuery, (err, requests) => {
+  db.query(fetchRequestsQuery, [userId], (err, requests) => {
     if (err) {
       return res.status(500).send({ error: 'Error fetching requests' });
     }
@@ -194,8 +195,47 @@ app.get('/all-open-requests', authenticateToken, (req, res) => {
   });
 });
 
+// Accept a request (protected route)
+app.post('/api/requests/:id/accept', authenticateToken, (req, res) => {
+  const requestId = req.params.id;
+  const userId = req.user.id;
+
+  // Check if the request exists and is open
+  const checkRequestQuery = `
+      SELECT * FROM requests 
+      WHERE id = ? AND request_status = 'open'
+  `;
+
+  db.query(checkRequestQuery, [requestId], (err, results) => {
+    if (err) {
+      console.error('Error checking request:', err);
+      return res.status(500).json({ error: 'Failed to check request status' });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Request not found or is not open for acceptance' });
+    }
+
+    // Insert or update accepted_requests table to mark it as accepted
+    const acceptRequestQuery = `
+        INSERT INTO accepted_requests (request_id, user_id, status, creator_status)
+        VALUES (?, ?, 'accepted', 'pending')
+        ON DUPLICATE KEY UPDATE status = 'accepted';
+    `;
+
+    db.query(acceptRequestQuery, [requestId, userId], (err, result) => {
+      if (err) {
+        console.error('Error accepting request:', err);
+        return res.status(500).json({ error: 'Failed to accept the request' });
+      }
+
+      res.status(200).json({ message: 'Request accepted successfully!' });
+    });
+  });
+});
+
 // Fetch all requests and accepted users
-app.get('/user/requests', authenticateToken, (req, res) => {
+app.get('/api/user/requests', authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   const fetchRequestsQuery = `
@@ -240,7 +280,7 @@ app.get('/user/requests', authenticateToken, (req, res) => {
 });
 
 // Reopen a closed request (protected route)
-app.post('/user/request/reopen', authenticateToken, (req, res) => {
+app.post('/api/user/request/reopen', authenticateToken, (req, res) => {
   const userId = req.user.id;
   const { id, start_location, end_location, meeting_time, request_type } = req.body;
 
@@ -262,7 +302,7 @@ app.post('/user/request/reopen', authenticateToken, (req, res) => {
 });
 
 // Edit a request (protected route)
-app.put('/requests/:id', authenticateToken, (req, res) => {
+app.put('/api/requests/:id', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
   const { start_location, end_location, meeting_time, request_type, request_status } = req.body;
@@ -308,7 +348,7 @@ app.put('/requests/:id', authenticateToken, (req, res) => {
 });
 
 // Delete a request (protected route)
-app.delete('/requests/:id', authenticateToken, (req, res) => {
+app.delete('/api/requests/:id', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -343,7 +383,7 @@ app.delete('/requests/:id', authenticateToken, (req, res) => {
 });
 
 // Cancel a request (protected route)
-app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
+app.post('/api/requests/:id/cancel', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.user.id;
 
@@ -364,60 +404,7 @@ app.post('/requests/:id/cancel', authenticateToken, (req, res) => {
   });
 });
 
-// Accept a request (protected route)
-app.post('/requests/:id/accept', authenticateToken, (req, res) => {
-  const requestId = req.params.id;
-  const userId = req.user.id;
-
-  // First, check if the request exists and is open
-  const checkRequestQuery = `
-      SELECT * FROM requests 
-      WHERE id = ? AND request_status = 'open'
-  `;
-
-  db.query(checkRequestQuery, [requestId], (err, results) => {
-      if (err) {
-          console.error('Error checking request:', err);
-          return res.status(500).json({ error: 'Failed to check request status' });
-      }
-
-      if (results.length === 0) {
-          return res.status(404).json({ error: 'Request not found or is not open for acceptance' });
-      }
-
-      // Update the request to mark it as "accepted" in accepted_requests table
-      const acceptRequestQuery = `
-          INSERT INTO accepted_requests (request_id, user_id, status, creator_status)
-          VALUES (?, ?, 'accepted', 'pending')
-          ON DUPLICATE KEY UPDATE status = 'accepted';
-      `;
-
-      db.query(acceptRequestQuery, [requestId, userId], (err, result) => {
-          if (err) {
-              console.error('Error accepting request:', err);
-              return res.status(500).json({ error: 'Failed to accept the request' });
-          }
-
-          // Update the main request status if needed (optional)
-          const updateRequestStatusQuery = `
-              UPDATE requests
-              SET request_status = 'accepted'
-              WHERE id = ?
-          `;
-
-          db.query(updateRequestStatusQuery, [requestId], (err, result) => {
-              if (err) {
-                  console.error('Error updating request status:', err);
-                  return res.status(500).json({ error: 'Failed to update request status' });
-              }
-
-              res.status(200).json({ message: 'Request accepted successfully!' });
-          });
-      });
-  });
-});
-
-app.post('/requests/:id/respond', authenticateToken, (req, res) => {
+app.post('/api/requests/:id/respond', authenticateToken, (req, res) => {
   const requestId = req.params.id;
   const userId = req.body.userId; // ID of the user being responded to
   const { action } = req.body; // "accept" or "decline"
@@ -452,7 +439,7 @@ app.post('/requests/:id/respond', authenticateToken, (req, res) => {
 });
 
 // Get user profile by ID (protected route)
-app.get('/user/:userId', authenticateToken, (req, res) => {
+app.get('/api/user/:userId', authenticateToken, (req, res) => {
   const userId = req.params.userId;
 
   const query = 'SELECT id, name, surname, email, bio FROM users WHERE id = ?';
@@ -469,7 +456,7 @@ app.get('/user/:userId', authenticateToken, (req, res) => {
   });
 });
 
-app.get('/proxy-distance', async (req, res) => {
+app.get('/api/proxy-distance', async (req, res) => {
   const { origins, destinations } = req.query;
   try {
     const response = await axios.get(`https://maps.googleapis.com/maps/api/distancematrix/json`, {
@@ -487,23 +474,70 @@ app.get('/proxy-distance', async (req, res) => {
 });
 
 // Endpoint to like a user's profile
-app.post('/user/:userId/like', authenticateToken, async (req, res) => {
+app.get('/api/user/:userId/like', authenticateToken, (req, res) => {
+  const { userId } = req.params;  // ID of the profile being viewed
+  const likedBy = req.user.id;     // ID of the currently logged-in user
+
+  const countQuery = `SELECT COUNT(*) AS likesCount FROM likes WHERE user_id = ?`;
+  const hasLikedQuery = `SELECT EXISTS (SELECT 1 FROM likes WHERE user_id = ? AND liked_by = ?) AS hasLiked`;
+
+  db.query(countQuery, [userId], (err, countResults) => {
+    if (err) {
+      console.error("Error fetching like count:", err);
+      return res.status(500).send({ error: 'Failed to fetch like count' });
+    }
+    
+    // After fetching the count, check if the user has already liked the profile
+    db.query(hasLikedQuery, [userId, likedBy], (err, likedResults) => {
+      if (err) {
+        console.error("Error checking if user has liked:", err);
+        return res.status(500).send({ error: 'Failed to check like status' });
+      }
+
+      // Send back the likes count and the `hasLiked` status
+      res.status(200).send({
+        likesCount: countResults[0].likesCount,
+        hasLiked: likedResults[0].hasLiked === 1
+      });
+    });
+  });
+});
+
+// Add a like (POST endpoint)
+app.post('/api/user/:userId/like', authenticateToken, (req, res) => {
+  const { userId } = req.params;  // ID of the profile being viewed
+  const likedBy = req.user.id;     // ID of the currently logged-in user
+
+  const query = `INSERT INTO likes (user_id, liked_by) VALUES (?, ?) 
+                 ON DUPLICATE KEY UPDATE user_id = user_id`; // Avoid duplicates
+
+  db.query(query, [userId, likedBy], (err) => {
+    if (err) {
+      console.error("Error adding like:", err);
+      return res.status(500).send({ error: 'Failed to add like' });
+    }
+    res.status(200).send({ message: 'Liked successfully!' });
+  });
+});
+
+// Endpoint to unlike a user's profile
+app.delete('/api/user/:userId/like', authenticateToken, async (req, res) => {
   const { userId } = req.params;
   const likedBy = req.user.id;
 
-  const query = `INSERT INTO likes (user_id, liked_by) VALUES (?, ?) ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP`;
+  const query = `DELETE FROM likes WHERE user_id = ? AND liked_by = ?`;
 
   db.query(query, [userId, likedBy], (err) => {
-      if (err) {
-          console.error("Error adding like:", err);
-          return res.status(500).send({ error: 'Failed to add like' });
-      }
-      res.status(200).send({ message: 'Like added successfully!' });
+    if (err) {
+      console.error("Error removing like:", err);
+      return res.status(500).send({ error: 'Failed to remove like' });
+    }
+    res.status(200).send({ message: 'Like removed successfully!' });
   });
 });
 
 // Endpoint to add a comment to a user's profile
-app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
+app.post('/api/user/:userId/comment', authenticateToken, async (req, res) => {
   const { userId } = req.params;
   const commentedBy = req.user.id;
   const { comment } = req.body;
@@ -520,7 +554,7 @@ app.post('/user/:userId/comment', authenticateToken, async (req, res) => {
 });
 
 // Endpoint to get the like count for a user's profile
-app.get('/user/:userId/likes', authenticateToken, (req, res) => {
+app.get('/api/user/:userId/likes', authenticateToken, (req, res) => {
   const { userId } = req.params;
 
   const query = `SELECT COUNT(*) AS likesCount FROM likes WHERE user_id = ?`;
@@ -535,7 +569,7 @@ app.get('/user/:userId/likes', authenticateToken, (req, res) => {
 });
 
 // Endpoint to get comments for a user's profile
-app.get('/user/:userId/comments', authenticateToken, (req, res) => {
+app.get('/api/user/:userId/comments', authenticateToken, (req, res) => {
   const { userId } = req.params;
 
   const query = `
@@ -555,7 +589,7 @@ app.get('/user/:userId/comments', authenticateToken, (req, res) => {
   });
 });
 
-app.get('/analytics/:userId', authenticateToken, async (req, res) => {
+app.get('/api/analytics/:userId', authenticateToken, async (req, res) => {
   const { userId } = req.params;
 
   try {

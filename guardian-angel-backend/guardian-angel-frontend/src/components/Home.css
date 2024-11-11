@@ -181,18 +181,28 @@ body {
   /* Profile Section Styling */
   .profile-content {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 1.5rem;
+  }
+  
+  .profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
   
   .profile-info h3 {
     font-size: 1.5rem;
     color: #FF69B4;
+    margin-bottom: 0.5rem;
   }
-
+  
   .profile-info p {
-    margin-left: 150px;
-  }
+    margin: 0;
+    font-size: 1rem;
+    color: #333;
+    margin-left: 200px;
+  }  
   
   /* Footer Styling */
   .footer {

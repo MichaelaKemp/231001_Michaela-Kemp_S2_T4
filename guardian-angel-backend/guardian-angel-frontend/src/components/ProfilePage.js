@@ -5,19 +5,32 @@ import { Bar, Line, Pie } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, TimeScale, TimeSeriesScale } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import './ProfilePage.css';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-// Registering necessary components for Chart.js
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
+
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, TimeScale, TimeSeriesScale);
 
 const ProfilePage = () => {
-  const { userId } = useParams();
+  const { userId: paramUserId } = useParams();
+  const navigate = useNavigate();
+  const loggedInUserId = localStorage.getItem('userId');
+  const userId = paramUserId || loggedInUserId;
+
+  useEffect(() => {
+    if (!userId) {
+      console.error('User ID is missing. Redirecting to login.');
+      navigate('/login');
+    }
+  }, [userId, navigate]);
+
   const [profile, setProfile] = useState(null);
   const [analytics, setAnalytics] = useState({
     completedTrips: 0,
     distanceByDate: [],
     cancellationRate: 0,
-    preferredRequestTypes: []
+    preferredRequestTypes: [],
+    tripCount: 0,
+    tripsAccepted: 0,
   });
   const [likesCount, setLikesCount] = useState(0);
   const [hasLiked, setHasLiked] = useState(false);
@@ -25,18 +38,11 @@ const ProfilePage = () => {
   const [newComment, setNewComment] = useState("");
   const [commentsLimit, setCommentsLimit] = useState(5);
   const [activeTab, setActiveTab] = useState("Profile");
-  const navigate = useNavigate();
 
   useEffect(() => {
-    if (!userId) {
-      navigate('/error');
-      return;
-    }
-
-    // Fetch user profile
     const fetchProfile = async () => {
       try {
-        const profileResponse = await axios.get(`${API_BASE_URL}/user/${userId}`, {
+        const profileResponse = await axios.get(`${API_BASE_URL}/api/user/${userId}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         setProfile(profileResponse.data);
@@ -45,23 +51,21 @@ const ProfilePage = () => {
       }
     };
 
-    // Fetch likes data
     const fetchLikes = async () => {
       try {
-        const likesResponse = await axios.get(`${API_BASE_URL}/user/${userId}/likes`, {
+        const likesResponse = await axios.get(`${API_BASE_URL}/api/user/${userId}/like`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
-        setLikesCount(likesResponse.data.likesCount);
-        setHasLiked(likesResponse.data.hasLiked);
+        setLikesCount(likesResponse.data.likesCount);  // Update with current likes count
+        setHasLiked(likesResponse.data.hasLiked);      // Update with current like status
       } catch (error) {
         console.error('Failed to fetch likes:', error);
       }
-    };
+    };  
 
-    // Fetch comments data
     const fetchComments = async () => {
       try {
-        const commentsResponse = await axios.get(`${API_BASE_URL}/user/${userId}/comments`, {
+        const commentsResponse = await axios.get(`${API_BASE_URL}/api/user/${userId}/comments`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
           params: { limit: commentsLimit }
         });
@@ -71,12 +75,12 @@ const ProfilePage = () => {
       }
     };
 
-    // Fetch analytics data
     const fetchAnalytics = async () => {
       try {
-        const analyticsResponse = await axios.get(`${API_BASE_URL}/analytics/${userId}`, {
+        const analyticsResponse = await axios.get(`${API_BASE_URL}/api/analytics/${userId}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
+        console.log("Analytics Data:", analyticsResponse.data);  // Log to check data structure
         setAnalytics(analyticsResponse.data);
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
@@ -87,30 +91,34 @@ const ProfilePage = () => {
     fetchLikes();
     fetchComments();
     fetchAnalytics();
-  }, [userId, navigate, commentsLimit]);
+  }, [userId, commentsLimit, navigate]);
 
-  // Handle liking the profile
   const handleLike = async () => {
-    if (hasLiked) {
-      alert("You've already liked this profile.");
-      return;
-    }
     try {
-      await axios.post(`${API_BASE_URL}/user/${userId}/like`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      setLikesCount(likesCount + 1);
-      setHasLiked(true);
+      if (hasLiked) {
+        // Unlike the profile
+        await axios.delete(`${API_BASE_URL}/api/user/${userId}/like`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        setLikesCount((prevCount) => prevCount - 1); // Decrement the likes count
+        setHasLiked(false);                         // Set hasLiked to false
+      } else {
+        // Like the profile
+        await axios.post(`${API_BASE_URL}/api/user/${userId}/like`, {}, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        setLikesCount((prevCount) => prevCount + 1); // Increment the likes count
+        setHasLiked(true);                           // Set hasLiked to true
+      }
     } catch (error) {
-      console.error('Error liking profile:', error);
+      console.error('Error updating like status:', error);
     }
   };
 
-  // Handle adding a comment
   const handleComment = async () => {
     if (newComment.trim() === "") return;
     try {
-      await axios.post(`${API_BASE_URL}/user/${userId}/comment`, { comment: newComment }, {
+      await axios.post(`${API_BASE_URL}/api/user/${userId}/comment`, { comment: newComment }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setComments([{ comment: newComment, created_at: new Date().toISOString(), commented_by_name: 'You' }, ...comments]);
@@ -120,74 +128,8 @@ const ProfilePage = () => {
     }
   };
 
-  // View more comments by increasing the limit
   const handleViewMoreComments = () => {
     setCommentsLimit(commentsLimit + 5);
-  };
-
-  // Config for "Trips Taken" line chart with fixed y-axis range
-  const tripData = {
-    labels: ['Trips Created and Completed', 'Trips Accepted'],
-    datasets: [
-      {
-        label: 'Number of Trips',
-        data: [analytics.tripCount, analytics.tripsAccepted],
-        borderColor: 'rgba(75, 192, 192, 1)',
-        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-        fill: true,
-      },
-    ],
-  };
-
-  const tripOptions = {
-    scales: {
-      y: {
-        suggestedMin: 0,
-        suggestedMax: 10 // Adjust max based on expected data range
-      },
-      x: {
-        type: 'time',
-        time: {
-          unit: 'day',
-          tooltipFormat: 'MMM dd, yyyy'
-        }
-      }
-    },
-    plugins: { legend: { display: false } }
-  };
-
-  // Config for "Kilometers Traveled" bar chart
-  const distanceData = {
-    labels: analytics.distanceByDate.map(item => item.travelDate),
-    datasets: [
-      {
-        label: 'Kilometers Traveled',
-        data: analytics.distanceByDate.map(item => item.totalDistance),
-        backgroundColor: 'rgba(255, 99, 132, 0.6)',
-      },
-    ],
-  };
-
-  // Config for cancellation rate
-  const cancellationRateData = {
-    labels: ['Canceled', 'Completed'],
-    datasets: [
-      {
-        data: [analytics.cancellationRate, 100 - analytics.cancellationRate],
-        backgroundColor: ['#FF6384', '#36A2EB'],
-      },
-    ],
-  };
-
-  // Config for preferred request types pie chart
-  const requestTypesData = {
-    labels: analytics.preferredRequestTypes.map(item => item.request_type),
-    datasets: [
-      {
-        data: analytics.preferredRequestTypes.map(item => item.count),
-        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56'],
-      },
-    ],
   };
 
   const handleTabChange = (tab) => setActiveTab(tab);
@@ -211,8 +153,9 @@ const ProfilePage = () => {
 
           <div className="like-section">
             <p className="likes-count">Likes: {likesCount}</p>
-            <button onClick={handleLike} disabled={hasLiked}>Like</button>
+            <button onClick={handleLike}>{hasLiked ? 'Unlike' : 'Like'}</button>
           </div>
+
 
           <div className="comments-section">
             <h3>Comments</h3>
@@ -223,7 +166,7 @@ const ProfilePage = () => {
             <ul className="comments-list">
               {comments.map((comment, index) => (
                 <li key={index}>
-                  <strong>{comment.commented_by_name} {comment.commented_by_surname}:</strong> {comment.comment}
+                  <strong>{comment.commented_by_name}:</strong> {comment.comment}
                 </li>
               ))}
             </ul>
@@ -239,20 +182,50 @@ const ProfilePage = () => {
           <h3 className="analytics-title">Travel Analytics</h3>
           <div className="analytics-section">
             <div className="chart-container">
-            <h4>Trips Taken</h4>
-              <Line data={tripData} options={{ responsive: true }} />
+              <h4>Trips Taken</h4>
+              <Line data={{
+                labels: ['Trips Created and Completed', 'Trips Accepted'],
+                datasets: [{ 
+                  label: 'Trips Taken', 
+                  data: [analytics.completedTrips || 0, analytics.tripsAccepted || 0],
+                  borderColor: 'rgba(75, 192, 192, 1)',
+                  backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                  fill: true 
+                }]
+              }} options={{ responsive: true }} />
             </div>
             <div className="chart-container">
-            <h4>Kilometers Traveled</h4>
-            <Bar data={distanceData} options={{ responsive: true }} />
-          </div>
-            <div className="chart-container" options={{ responsive: true }}>
-              <h4>Trip Cancellation Rate</h4>
-              <Pie data={cancellationRateData} />
+              <h4>Kilometers Traveled</h4>
+              <Bar data={{
+                labels: analytics.distanceByDate.map(item => item.travelDate) || [],
+                datasets: [{ 
+                  label: 'Kilometers Traveled', 
+                  data: analytics.distanceByDate.map(item => item.totalDistance) || [],
+                  backgroundColor: 'rgba(255, 99, 132, 0.6)'
+                }]
+              }} options={{ responsive: true }} />
             </div>
-            <div className="chart-container" options={{ responsive: true }}>
+            <div className="chart-container">
+              <h4>Trip Cancellation Rate</h4>
+              <Pie data={{
+                labels: ['Canceled', 'Completed'],
+                datasets: [{ 
+                  label: 'Trip Cancellation Rate', 
+                  data: [analytics.cancellationRate || 0, 100 - (analytics.cancellationRate || 0)],
+                  backgroundColor: ['#FF6384', '#36A2EB']
+                }]
+              }} options={{ responsive: true }} />
+            </div>
+            <div className="chart-container">
               <h4>Preferred Request Types</h4>
-              <Pie data={requestTypesData} />
+              <Pie data={{
+                labels: analytics.preferredRequestTypes.map(item => item.request_type) || [],
+                datasets: [{ 
+                  label: 'Preferred Request Types', 
+                  data: analytics.preferredRequestTypes.map(item => item.count) || [],
+                  backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56']
+                }]
+              }} options={{ responsive: true }} />
             </div>
           </div>
         </div>
