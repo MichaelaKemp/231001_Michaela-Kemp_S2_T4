@@ -15,7 +15,7 @@ app.use(cors({
 }));
 app.use(bodyParser.json());
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'guardian-angel-frontend/build')));
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -671,7 +671,7 @@ app.get('/analytics/:userId', authenticateToken, async (req, res) => {
 });
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'guardian-angel-frontend/build', 'index.html'));
 });
 
 // Start the server
