@@ -2,6 +2,10 @@
 
 Guardian Angel is a web application designed to enhance safety by connecting women who seek companionship during activities such as walking or road trips. The application allows users to create requests for company, which can be accepted by other women nearby. The goal is to foster a supportive community and improve safety during travel.
 
+## Hosted at
+
+https://guardian-angel-za-1344c29eb6b7.herokuapp.com/
+
 ## Features
 
 - User registration and authentication
